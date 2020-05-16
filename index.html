@@ -3,6 +3,7 @@
 	<head>
 		<title>COVID</title>
 		<meta charset="utf8"/>
+		<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@500&display=swap" rel="stylesheet"> 
 		<style>
 			html, body {
 				margin: 0px;
@@ -10,18 +11,41 @@
 				height: 100vh;
 				overflow: hidden;
 			}
-			canvas {
+			canvas#c {
 				position: absolute;
 				top: 0px;
 				left: 0px;
 				width: 100vw;
 				height: 100vh;
-				z-index: 0;
+				z-index: 2;
+			}
+			canvas#graph {
+				position: absolute;
+				bottom: 0px;
+				left: 0px;
+				width: 300px;
+				height: 200px;
+				z-index: 1;
+			}
+			div#count {
+				position: absolute;
+				/*bottom: 0px;
+				left: 50%;
+				transform: translateX(-50%);*/
+				bottom: 200px;
+				left: 0;
+				width: 300px;
+				text-align: center;
+				z-index: 1;
+				font-family: 'DM Mono', monospace;
 			}
 		</style>
+		<script src="https://kit.fontawesome.com/2d6e849747.js" crossorigin="anonymous"></script>
 	</head>
 	<body>
 		<canvas id="c"></canvas>
+		<canvas id="graph"></canvas>
+		<div id="count"></div>
 		<script src="index.js"></script>
 	</body>
 </html>

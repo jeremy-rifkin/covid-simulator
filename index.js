@@ -1,11 +1,16 @@
 let canvas = document.getElementById("c"),
 	ctx = canvas.getContext("2d"),
+	graph = document.getElementById("graph"),
+	graph_ctx = graph.getContext("2d"),
 	px_per_unit = 10,
 	screen_px_w,
 	screen_px_h,
 	screen_w,
 	screen_h,
 	dt = 1/60; // TODO
+
+graph.width = 300;
+graph.height = 200;
 
 function pxtoscreen(x, y) {
 	// TODO
@@ -30,6 +35,10 @@ let states = {
 };
 
 let recovery_time = 1000 * 20;
+
+let simulation_running = true,
+	last_infection = Date.now(),
+	delay = 1000 * 10;
 
 class Ball {
 	constructor() {
@@ -97,12 +106,12 @@ class Ball {
 				// do infection
 				if(this.state == states.vulnerable && obj.state == states.infected) {
 					this.state = states.infected;
-					this.infected_time = Date.now();
+					last_infection = this.infected_time = Date.now();
 				}
 				// both ways
 				if(obj.state == states.vulnerable && this.state == states.infected) {
 					obj.state = states.infected;
-					obj.infected_time = Date.now();
+					last_infection = obj.infected_time = Date.now();
 				}
 			}
 		} else if(obj instanceof Line) {
@@ -270,6 +279,35 @@ class Wall {
 
 let scene = [];
 
+let total_ticks = 0;
+let spread = []; // [delta_tick, infected, vulnerable, recovered]
+let n_balls = 70;
+
+function draw_graph() {
+	if(spread.length == 0)
+		return;
+	let dx = graph.width / total_ticks,
+		x,
+		h = graph.height,
+		ph = h - 10;
+	graph_ctx.clearRect(0, 0, graph.width, graph.height);
+	graph_ctx.lineWidth = 2;
+	let colors = [red, grey, blue];
+	for(let p = 1; p <= 3; p++) {
+		x = 0;
+		graph_ctx.strokeStyle = colors[p - 1];
+		graph_ctx.beginPath();
+		graph_ctx.moveTo(x, h - spread[0][p] / 70 * ph);
+		x += dx;
+		for(let i = 1; i < spread.length; i++) {
+			graph_ctx.lineTo(x, h - spread[i][p] / 70 * ph);
+			x += dx * spread[i][0];
+		}
+		graph_ctx.lineTo(x, h - spread[spread.length - 1][p] / 70 * ph);
+		graph_ctx.stroke();
+	}
+}
+
 function is_good_spawn(x, y) {
 	for(let o of scene) {
 		if(o instanceof Wall) {
@@ -280,11 +318,47 @@ function is_good_spawn(x, y) {
 }
 
 function update() {
+	total_ticks++;
 	for(let i = 0; i < scene.length; i++) {
 		for(let j = i + 1; j < scene.length; j++) {
 			scene[i].updateAgainst(scene[j]);
 		}
 		scene[i].update();
+	}
+	let vulnerable = 0,
+		infected = 0,
+		recovered = 0;
+	for(let e of scene) {
+		if(e instanceof Ball) {
+			switch(e.state) {
+				case states.vulnerable:
+					vulnerable++;
+					break;
+				case states.infected:
+					infected++;
+					break;
+				case states.recovered:
+					recovered++;
+					break;
+				default:
+					throw "oops";
+			}
+		}
+	}
+	if(spread.length > 0
+	  && infected == spread[spread.length - 1][1]
+	  && vulnerable == spread[spread.length - 1][2]
+	  && recovered == spread[spread.length - 1][3])
+		spread[spread.length - 1][0]++;
+	else
+		spread.push([1, infected, vulnerable, recovered]);
+	
+	document.getElementById("count").innerHTML = `<span style="color: ${grey}">${vulnerable}</span> + <span style="color: ${red}">${infected}</span> + <span style="color: ${blue}">${recovered}</span> = ${vulnerable + infected + recovered}`;
+	
+	//if(Date.now() - last_infection >= delay) {
+	//if(infected == 0 && Date.now() - last_infection >= delay) {
+	if(infected == 0 && spread[spread.length - 1][0] * dt * 1000 >= delay) {
+		simulation_running = false;
 	}
 }
 
@@ -292,12 +366,15 @@ function render() {
 	ctx.clearRect(0, 0, screen_px_w, screen_px_h);
 	for(let e of scene)
 		e.draw();
+	draw_graph();
 }
 
 function loop() {
 	window.requestAnimationFrame(loop);
-	update();
-	render();
+	if(simulation_running) {
+		update();
+		render();
+	}
 	// print out total kinetic energy (helpful for making sure the physics is right):
 	//let total = 0;
 	//for(let e of scene) {
@@ -347,7 +424,7 @@ function init() {
 	for(let b of borders)
 		scene.push(b);
 	scene.push(new Wall);
-	for(let i = 0; i < 70; i++)
+	for(let i = 0; i < n_balls; i++)
 		scene.push(new Ball);
 	scene.push(new Line([-40, 0], [-50, -10]));
 	scene.push(new Line([-40, 0], [-50,  10]));
