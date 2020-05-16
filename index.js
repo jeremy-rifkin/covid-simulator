@@ -254,7 +254,20 @@ function resize() {
 	borders[1].set([ w/2, -h/2], [ w/2,  h/2]); // r
 	borders[2].set([-w/2,  h/2], [ w/2,  h/2]); // t
 	borders[3].set([-w/2, -h/2], [ w/2, -h/2]); // b
-	// TODO: make sure balls aren't trapped on the outside
+	// don't trap balls outside the screen
+	// TODO: give objects a .onresize() method?
+	let epsilon = 0.01;
+	for(let e of scene)
+		if(e instanceof Ball) {
+			if(e.x < -w/2)
+				e.x = -w/2 + epsilon;
+			else if(e.x > w/2)
+				e.x = w/2 - epsilon;
+			if(e.y < -h/2)
+				e.y = -h/2 + epsilon;
+			else if(e.y > h/2)
+				e.y = h/2 - epsilon;
+		}
 	render();
 }
 resize();
