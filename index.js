@@ -1,11 +1,11 @@
 let canvas = document.getElementById("c"),
 	ctx = canvas.getContext("2d"),
-	pxperunit = 10,
-	pxw,
-	pxh,
-	w,
-	h,
-	dt = 1/60;
+	px_per_unit = 10,
+	screen_px_w,
+	screen_px_h,
+	screen_w,
+	screen_h,
+	dt = 1/60; // TODO
 
 function pxtoscreen(x, y) {
 	// TODO
@@ -13,8 +13,8 @@ function pxtoscreen(x, y) {
 
 function screentopx(x, y) {
 	return [
-		(x + (w / 2)) / w * pxw,
-		pxh * (1 - (y + (h / 2)) / h)
+		(x + (screen_w / 2)) / screen_w * screen_px_w,
+		screen_px_h * (1 - (y + (screen_h / 2)) / screen_h)
 	];
 }
 
@@ -29,14 +29,16 @@ let states = {
 	recovered: 2
 };
 
-let recovery_time = 1000 * 10;
+let recovery_time = 1000 * 20;
 
 class Ball {
 	constructor() {
 		this.r = 2;
 		this.m = 10;
-		this.x = -w/2 + this.r + Math.random() * (w - 2 * this.r);
-		this.y = -h/2 + this.r + Math.random() * (h - 2 * this.r);
+		do {
+			this.x = -screen_w/2 + this.r + Math.random() * (screen_w - 2 * this.r);
+			this.y = -screen_h/2 + this.r + Math.random() * (screen_h - 2 * this.r);
+		} while(!is_good_spawn(this.x, this.y));
 		let theta = Math.random() * 2 * Math.PI;
 		this.vx = 7 * Math.cos(theta);
 		this.vy = 7 * Math.sin(theta);
@@ -106,6 +108,9 @@ class Ball {
 		} else if(obj instanceof Line) {
 			// we're actually going to pass the collision off to Line.updateAgainst
 			obj.updateAgainst(this);
+		} else if(obj instanceof Wall) {
+			// again, pass off to the wall update method
+			obj.updateAgainst(this);
 		}
 	}
 	draw() {
@@ -123,7 +128,7 @@ class Ball {
 				throw "oops";
 		}
 		ctx.beginPath();
-		ctx.arc(...screentopx(this.x, this.y), this.r * pxperunit, 0, 2 * Math.PI);
+		ctx.arc(...screentopx(this.x, this.y), this.r * px_per_unit, 0, 2 * Math.PI);
 		ctx.fill();
 	}
 }
@@ -143,7 +148,7 @@ class Line {
 		this.p2 = p2;
 	}
 	update() {}
-	updateAgainst(obj) {
+	_line_collision(obj) {
 		let bx = obj.x,
 			by = obj.y;
 		// optimizing delta_x^2 + delta_y^2 with constraint ax + by + c = 0
@@ -178,26 +183,39 @@ class Line {
 				obj.vx = v[0] - v2n / (n_mag * n_mag) * n[0];
 				obj.vy = v[1] - v2n / (n_mag * n_mag) * n[1];
 			}
+			return true;
+		}
+		return false;
+	}
+	_endpoint_collision(obj) {
+		// check collision with endpoints real quick
+		let bx = obj.x,
+			by = obj.y;
+		// p1
+		if((bx - this.p1[0]) * (bx - this.p1[0]) + (by - this.p1[1]) * (by - this.p1[1]) <= obj.r * obj.r
+		  && (bx - this.p1[0]) * obj.vx + (by - this.p1[1]) * obj.vy <= 0) {
+			obj.vx *= -1;
+			obj.vy *= -1;
+		}
+		// p2
+		if((bx - this.p2[0]) * (bx - this.p2[0]) + (by - this.p2[1]) * (by - this.p2[1]) <= obj.r * obj.r
+		  && (bx - this.p2[0]) * obj.vx + (by - this.p2[1]) * obj.vy <= 0) {
+			obj.vx *= -1;
+			obj.vy *= -1;
+		}
+	}
+	updateAgainst(obj) {
+		if(obj instanceof Ball) {
+			if(!this._line_collision(obj))
+				this._endpoint_collision(obj);
 		} else {
-			// check collision with endpoints real quick
-			// p1
-			if((bx - this.p1[0]) * (bx - this.p1[0]) + (by - this.p1[1]) * (by - this.p1[1]) <= obj.r * obj.r
-			  && (bx - this.p1[0]) * obj.vx + (by - this.p1[1]) * obj.vy <= 0) {
-				obj.vx *= -1;
-				obj.vy *= -1;
-			}
-			// p2
-			if((bx - this.p2[0]) * (bx - this.p2[0]) + (by - this.p2[1]) * (by - this.p2[1]) <= obj.r * obj.r
-			  && (bx - this.p2[0]) * obj.vx + (by - this.p2[1]) * obj.vy <= 0) {
-				obj.vx *= -1;
-				obj.vy *= -1;
-			}
+			// TODO?
 		}
 	}
 	draw() {
 		if(this.line) {
 			ctx.strokeStyle = "#000";
-			ctx.lineWidth = 4;
+			ctx.lineWidth = 2;
 			ctx.beginPath();
 			ctx.moveTo(...screentopx(...this.p1));
 			ctx.lineTo(...screentopx(...this.p2));
@@ -206,7 +224,60 @@ class Line {
 	}
 }
 
+class Wall {
+	constructor() {
+		let x = 0,
+			y = 0,
+			w = 4,
+			h = screen_h * .8;
+		//this.left = x - w/2;
+		//this.right = x + w/2;
+		//this.top = y + h/2;
+		//this.bottom = y - h/2;
+		let left = x - w/2,
+			right = x + w/2,
+			top = y + h/2,
+			bottom = y - h/2;
+		this.left = left;
+		this.right = right;
+		this.top = top;
+		this.bottom = bottom;
+		this.edges = [
+			new Line([left, bottom], [left, top]),
+			new Line([left, top], [right, top]),
+			new Line([right, top], [right, bottom]),
+			new Line([right, bottom], [left, bottom])
+		];
+	}
+	update() {}
+	updateAgainst(obj) {
+		if(obj instanceof Ball) {
+			let did_collide = 0;
+			for(let e of this.edges)
+				did_collide |= e._line_collision(obj);
+			if(!did_collide)
+				for(let e of this.edges)
+					e._endpoint_collision(obj);
+		} else {
+			// TODO?
+		}
+	}
+	draw() {
+		for(let e of this.edges)
+			e.draw();
+	}
+}
+
 let scene = [];
+
+function is_good_spawn(x, y) {
+	for(let o of scene) {
+		if(o instanceof Wall) {
+			return !(between(x, o.left,  o.right) && between(y, o.top,  o.bottom));
+		}
+	}
+	return true;
+}
 
 function update() {
 	for(let i = 0; i < scene.length; i++) {
@@ -218,7 +289,7 @@ function update() {
 }
 
 function render() {
-	ctx.clearRect(0, 0, pxw, pxh);
+	ctx.clearRect(0, 0, screen_px_w, screen_px_h);
 	for(let e of scene)
 		e.draw();
 }
@@ -245,28 +316,28 @@ let borders = [
 
 window.addEventListener("resize", resize, false);
 function resize() {
-	pxw = canvas.width = window.innerWidth;
-	pxh = canvas.height = window.innerHeight;
-	w = window.innerWidth / pxperunit;
-	h = window.innerHeight / pxperunit;
+	screen_px_w = canvas.width = window.innerWidth;
+	screen_px_h = canvas.height = window.innerHeight;
+	screen_w = window.innerWidth / px_per_unit;
+	screen_h = window.innerHeight / px_per_unit;
 	// redo borders
-	borders[0].set([-w/2, -h/2], [-w/2,  h/2]); // l
-	borders[1].set([ w/2, -h/2], [ w/2,  h/2]); // r
-	borders[2].set([-w/2,  h/2], [ w/2,  h/2]); // t
-	borders[3].set([-w/2, -h/2], [ w/2, -h/2]); // b
+	borders[0].set([-screen_w/2, -screen_h/2], [-screen_w/2,  screen_h/2]); // l
+	borders[1].set([ screen_w/2, -screen_h/2], [ screen_w/2,  screen_h/2]); // r
+	borders[2].set([-screen_w/2,  screen_h/2], [ screen_w/2,  screen_h/2]); // t
+	borders[3].set([-screen_w/2, -screen_h/2], [ screen_w/2, -screen_h/2]); // b
 	// don't trap balls outside the screen
 	// TODO: give objects a .onresize() method?
 	let epsilon = 0.01;
 	for(let e of scene)
 		if(e instanceof Ball) {
-			if(e.x < -w/2)
-				e.x = -w/2 + epsilon;
-			else if(e.x > w/2)
-				e.x = w/2 - epsilon;
-			if(e.y < -h/2)
-				e.y = -h/2 + epsilon;
-			else if(e.y > h/2)
-				e.y = h/2 - epsilon;
+			if(e.x < -screen_w/2)
+				e.x = -screen_w/2 + epsilon;
+			else if(e.x > screen_w/2)
+				e.x = screen_w/2 - epsilon;
+			if(e.y < -screen_h/2)
+				e.y = -screen_h/2 + epsilon;
+			else if(e.y > screen_h/2)
+				e.y = screen_h/2 - epsilon;
 		}
 	render();
 }
@@ -275,10 +346,12 @@ resize();
 function init() {
 	for(let b of borders)
 		scene.push(b);
+	scene.push(new Wall);
 	for(let i = 0; i < 70; i++)
 		scene.push(new Ball);
-	scene.push(new Line([-40, 0], [0, 10]));
-	scene.push(new Line([-40, 10], [-40, -40]));
+	scene.push(new Line([-40, 0], [-50, -10]));
+	scene.push(new Line([-40, 0], [-50,  10]));
+	
 	window.requestAnimationFrame(loop);
 }
 
