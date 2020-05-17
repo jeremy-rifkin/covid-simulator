@@ -9,19 +9,17 @@ let canvas = document.getElementById("c"),
 	screen_h,
 	dt = 1/60; // TODO
 
-let play_pause = document.getElementById("playpause"),
-	circle_add = document.getElementById("circleadd"),
-	pointer = document.getElementById("pointer"),
-	draw_lines = document.getElementById("drawlines");
-
 graph.width = 300;
 graph.height = 200;
 
-function pxtoscreen(x, y) {
-	// TODO
+function screen_to_coord(x, y) {
+	return [
+		screen_w * x / screen_px_w - screen_w / 2,
+		-(screen_h * (y / screen_px_h - 1) + screen_h / 2)
+	];
 }
 
-function screentopx(x, y) {
+function coord_to_screen(x, y) {
 	return [
 		(x + (screen_w / 2)) / screen_w * screen_px_w,
 		screen_px_h * (1 - (y + (screen_h / 2)) / screen_h)
@@ -39,18 +37,19 @@ let states = {
 	recovered: 2
 };
 
-let recovery_time = 1000 * 20;
 
 // TODO: make sure tick based time comparison is accurate
 
-let simulation_running = true,
-	delay = 1000 * 5;
+let simulation_running = false,
+	recovery_time = 1000 * 20,
+	delay = 1000 * 5,
+	current_tick = 0,
+	n_balls = 0,
+	mouse_x = null,
+	mouse_y = null;
 
-let scene = [];
-
-let current_tick = 0;
-let spread = []; // [delta_tick, infected, vulnerable, recovered]
-let n_balls = 70;
+let scene = [],
+	spread = []; // [delta_tick, infected, vulnerable, recovered]
 
 class Ball {
 	constructor() {
@@ -63,7 +62,7 @@ class Ball {
 		let theta = Math.random() * 2 * Math.PI;
 		this.vx = 12 * Math.cos(theta);
 		this.vy = 12 * Math.sin(theta);
-		this.state = Math.random() < 0.05 ? states.infected : states.vulnerable;
+		this.state = states.vulnerable;
 		this.infected_time = this.state == states.infected ? current_tick : null;
 	}
 	update() {
@@ -149,8 +148,13 @@ class Ball {
 				throw "oops";
 		}
 		ctx.beginPath();
-		ctx.arc(...screentopx(this.x, this.y), this.r * px_per_unit, 0, 2 * Math.PI);
+		ctx.arc(...coord_to_screen(this.x, this.y), this.r * px_per_unit, 0, 2 * Math.PI);
 		ctx.fill();
+		//if((mouse_x - this.x) * (mouse_x - this.x) + (mouse_y - this.y) * (mouse_y - this.y) <= this.r * this.r) {
+		//	ctx.strokeStyle = "#000";
+		//	ctx.lineWidth = 2;
+		//	ctx.stroke();
+		//}
 	}
 }
 
@@ -238,39 +242,51 @@ class Line {
 			ctx.strokeStyle = "#000";
 			ctx.lineWidth = 2;
 			ctx.beginPath();
-			ctx.moveTo(...screentopx(...this.p1));
-			ctx.lineTo(...screentopx(...this.p2));
+			ctx.moveTo(...coord_to_screen(...this.p1));
+			ctx.lineTo(...coord_to_screen(...this.p2));
 			ctx.stroke();
 		}
 	}
 }
 
 class Wall {
-	constructor() {
-		let x = 0,
-			y = 0,
-			w = 4,
-			h = screen_h * .8;
-		//this.left = x - w/2;
-		//this.right = x + w/2;
-		//this.top = y + h/2;
-		//this.bottom = y - h/2;
-		let left = x - w/2,
-			right = x + w/2,
-			top = y + h/2,
-			bottom = y - h/2;
-		this.left = left;
-		this.right = right;
-		this.top = top;
-		this.bottom = bottom;
+	constructor(x, y) {
+		let w = 4,
+			h = screen_h;
+		this.left = x - w/2;
+		this.right = x + w/2;
+		this.top = y + h/2;
+		this.bottom = y - h/2;
 		this.edges = [
-			new Line([left, bottom], [left, top]),
-			new Line([left, top], [right, top]),
-			new Line([right, top], [right, bottom]),
-			new Line([right, bottom], [left, bottom])
+			new Line([this.left, this.bottom], [this.left, this.bottom + h / 2]),
+			new Line([this.left, this.bottom + h / 2], [this.right, this.bottom + h / 2]),
+			new Line([this.right, this.bottom], [this.right, this.bottom + h / 2]),
+
+			new Line([this.left, this.top], [this.left, this.top - h / 2]),
+			new Line([this.left, this.top - h / 2], [this.right, this.top - h / 2]),
+			new Line([this.right, this.top], [this.right, this.top - h / 2])
 		];
+		// This is really *really* bad
+		this.open_ticks = 0;
+		this.tick_delta = .1;
 	}
-	update() {}
+	open() {
+		this.open_ticks = 120;
+	}
+	update() {
+		if(this.open_ticks) {
+			this.open_ticks--;
+			this.edges[0].p2[1] -= this.tick_delta;
+			this.edges[1].p2[1] -= this.tick_delta;
+			this.edges[2].p2[1] -= this.tick_delta;
+			this.edges[1].p1[1] -= this.tick_delta;
+
+			this.edges[3].p2[1] += this.tick_delta;
+			this.edges[4].p2[1] += this.tick_delta;
+			this.edges[5].p2[1] += this.tick_delta;
+			this.edges[4].p1[1] += this.tick_delta;
+		}
+	}
 	updateAgainst(obj) {
 		if(obj instanceof Ball) {
 			let did_collide = 0;
@@ -284,6 +300,10 @@ class Wall {
 		}
 	}
 	draw() {
+		if(!(mouse_x == null || mouse_y == null) && between(mouse_x, this.left, this.right) && between(mouse_y, this.top, this.bottom)) {
+			ctx.fillStyle = "#cdcdcd";
+			ctx.fillRect(...coord_to_screen(this.left, this.top), (this.right - this.left) * px_per_unit, (this.top - this.bottom) * px_per_unit);
+		}
 		for(let e of this.edges)
 			e.draw();
 	}
@@ -303,13 +323,13 @@ function draw_graph() {
 		x = 0;
 		graph_ctx.strokeStyle = colors[p - 1];
 		graph_ctx.beginPath();
-		graph_ctx.moveTo(x, h - spread[0][p] / 70 * ph);
+		graph_ctx.moveTo(x, h - spread[0][p] / n_balls * ph);
 		x += dx;
 		for(let i = 1; i < spread.length; i++) {
-			graph_ctx.lineTo(x, h - spread[i][p] / 70 * ph);
+			graph_ctx.lineTo(x, h - spread[i][p] / n_balls * ph);
 			x += dx * spread[i][0];
 		}
-		graph_ctx.lineTo(x, h - spread[spread.length - 1][p] / 70 * ph);
+		graph_ctx.lineTo(x, h - spread[spread.length - 1][p] / n_balls * ph);
 		graph_ctx.stroke();
 	}
 }
@@ -317,7 +337,9 @@ function draw_graph() {
 function is_good_spawn(x, y) {
 	for(let o of scene) {
 		if(o instanceof Wall) {
-			return !(between(x, o.left,  o.right) && between(y, o.top,  o.bottom));
+			if(between(x, o.left,  o.right) && between(y, o.top,  o.bottom)) {
+				return false;
+			}
 		}
 	}
 	return true;
@@ -361,12 +383,12 @@ function update() {
 	
 	document.getElementById("count").innerHTML = `<span style="color: ${grey}">${vulnerable}</span> + <span style="color: ${red}">${infected}</span> + <span style="color: ${blue}">${recovered}</span> = ${vulnerable + infected + recovered}`;
 	
-	if(infected == 0 && spread[spread.length - 1][0] * dt * 1000 >= delay) {
-		// bring graph and count to top for good measure
-		document.getElementById("count").style.zIndex = 3;
-		graph.style.zIndex = 3;
-		simulation_running = false;
-	}
+	//if(infected == 0 && spread[spread.length - 1][0] * dt * 1000 >= delay) {
+	//	// bring graph and count to top for good measure
+	//	document.getElementById("count").style.zIndex = 3;
+	//	graph.style.zIndex = 3;
+	//	simulation_running = false;
+	//}
 }
 
 function render() {
@@ -376,19 +398,24 @@ function render() {
 	draw_graph();
 }
 
-let last_tick = performance.now();
+let last_tick, render_needed = false;
 
 function loop() {
 	window.requestAnimationFrame(loop);
-	let t = performance.now();
-	let did_update = false;
-	if(simulation_running && t - last_tick >= dt * 1000) { // TODO: use while loop?
-		did_update = true;
-		last_tick += dt * 1000;
-		update();
-	}
-	if(did_update)
+	if(simulation_running) {
+		let t = performance.now(),
+			did_update = false;
+		if(t - last_tick >= dt * 1000) { // TODO: use while loop?
+			did_update = true;
+			last_tick += dt * 1000;
+			update();
+		}
+		if(did_update)
+			render();
+	} else if(render_needed) {
 		render();
+		render_needed = false;
+	}
 	// print out total kinetic energy (helpful for making sure the physics is right):
 	//let total = 0;
 	//for(let e of scene) {
@@ -437,13 +464,173 @@ resize();
 function init() {
 	for(let b of borders)
 		scene.push(b);
-	scene.push(new Wall);
-	for(let i = 0; i < n_balls; i++)
-		scene.push(new Ball);
-	scene.push(new Line([-40, 0], [-50, -10]));
-	scene.push(new Line([-40, 0], [-50,  10]));
-	
+	last_tick = performance.now();
 	window.requestAnimationFrame(loop);
 }
 
 init();
+
+
+let play_pause = document.getElementById("playpause"),
+	circle_add = document.getElementById("circleadd"),
+	pointer = document.getElementById("pointer"),
+	draw_lines = document.getElementById("drawlines"),
+	draw_walls = document.getElementById("drawwalls");
+	
+let modes = {
+	none: 0,
+	pointer: 1,
+	line: 2,
+	wall: 3
+};
+let current_mode = modes.none;
+
+function reset_buttons() {
+	current_mode = modes.none;
+	pointer.removeAttribute("data-selected");
+	draw_lines.removeAttribute("data-selected");
+	draw_walls.removeAttribute("data-selected");
+}
+
+// state for draw_lines
+let line_p1 = undefined;
+
+// play pause
+play_pause.addEventListener("click", () => {
+	if(simulation_running) {
+		simulation_running = false;
+		play_pause.innerHTML = `<i class="fas fa-play"></i>`;
+	} else {
+		simulation_running = true;
+		last_tick = performance.now();
+		play_pause.innerHTML = `<i class="fas fa-pause"></i>`;
+	}
+}, false);
+
+// circle add and modal
+let overlay = document.getElementById("overlay"),
+    modal = document.getElementById("modal"),
+    submit = document.getElementById("submit"),
+	input = document.getElementById("nballs");
+circle_add.addEventListener("click", () => {
+	overlay.style.display = "block";
+	modal.style.display = "block";
+	input.focus();
+}, false);
+overlay.addEventListener("click", () => {
+	overlay.style.display = "none";
+	modal.style.display = "none";
+	input.value = "";
+}, false);
+function do_submit(e) {
+	if(e.type == "click" || e.keyCode == 13) {
+		let q = parseInt(input.value);
+		input.value = "";
+		if(!isNaN(q) && q > 0) {
+			n_balls += q;
+			for(let i = 0; i < q; i++)
+				scene.push(new Ball);
+			render();
+			overlay.style.display = "none";
+			modal.style.display = "none";
+		}
+	}
+}
+submit.addEventListener("click", do_submit, false);
+input.addEventListener("keydown", do_submit, false);
+
+// pointer
+pointer.addEventListener("click", () => {
+	if(current_mode == modes.pointer) {
+		current_mode = modes.none;
+		pointer.removeAttribute("data-selected");
+	} else {
+		reset_buttons();
+		current_mode = modes.pointer;
+		pointer.setAttribute("data-selected", "");
+	}
+}, false);
+
+// draw_lines
+draw_lines.addEventListener("click", () => {
+	if(current_mode == modes.line) {
+		current_mode = modes.none;
+		draw_lines.removeAttribute("data-selected");
+	} else {
+		reset_buttons();
+		current_mode = modes.line;
+		draw_lines.setAttribute("data-selected", "");
+	}
+}, false);
+
+// draw_walls
+draw_walls.addEventListener("click", () => {
+	if(current_mode == modes.wall) {
+		current_mode = modes.none;
+		draw_walls.removeAttribute("data-selected");
+	} else {
+		reset_buttons();
+		current_mode = modes.wall;
+		draw_walls.setAttribute("data-selected", "");
+	}
+}, false);
+
+canvas.addEventListener("click", e => {
+	if(current_mode == modes.pointer) {
+		// check for ball collision
+		let least_distance = undefined, // really r^2
+			least_distance_index = undefined;
+		let c = screen_to_coord(e.x, e.y);
+		mouse_x = c[0];
+		mouse_y = c[1];
+		for(let i = 0; i < scene.length; i++) {
+			if(scene[i] instanceof Ball) {
+				let distance = (mouse_x - scene[i].x) * (mouse_x - scene[i].x) + (mouse_y - scene[i].y) * (mouse_y - scene[i].y);
+				if(least_distance == undefined || distance < least_distance) {
+					least_distance = distance;
+					least_distance_index = i;
+				}
+			}
+		}
+		if(least_distance != undefined && least_distance <= scene[least_distance_index].r * scene[least_distance_index].r) { // make sure we actually found something
+			if(scene[least_distance_index].state == states.infected) {
+				scene[least_distance_index].state = states.vulnerable;
+			} else {
+				scene[least_distance_index].state = states.infected;
+				scene[least_distance_index].infected_time = current_tick;
+			}
+			render_needed = true;
+		} else {
+			for(let i = 0; i < scene.length; i++) {
+				if(scene[i] instanceof Wall) {
+					if(between(mouse_x, scene[i].left,  scene[i].right) && between(mouse_y, scene[i].top,  scene[i].bottom)) {
+						scene[i].open();
+					}
+				}
+			}
+		}
+	} else if(current_mode == modes.line) {
+		if(line_p1 == undefined) {
+			line_p1 = screen_to_coord(e.x, e.y);
+		} else {
+			scene.push(new Line(line_p1, screen_to_coord(e.x, e.y)));
+			render_needed = true;
+			line_p1 = undefined;
+		}
+	} else if(current_mode == modes.wall) {
+		let c = screen_to_coord(e.x, e.y);
+		scene.push(new Wall(c[0], 0));
+		render_needed = true;
+	}
+}, false);
+canvas.addEventListener("mousemove", e => {
+	let c = screen_to_coord(e.x, e.y);
+	mouse_x = c[0];
+	mouse_y = c[1];
+	render_needed = true;
+}, false);
+document.addEventListener("mouseout", () => {
+	mouse_x = null;
+	mouse_y = null;
+	render_needed = true;
+}, false);
