@@ -9,6 +9,11 @@ let canvas = document.getElementById("c"),
 	screen_h,
 	dt = 1/60; // TODO
 
+let play_pause = document.getElementById("playpause"),
+	circle_add = document.getElementById("circleadd"),
+	pointer = document.getElementById("pointer"),
+	draw_lines = document.getElementById("drawlines");
+
 graph.width = 300;
 graph.height = 200;
 
@@ -36,9 +41,16 @@ let states = {
 
 let recovery_time = 1000 * 20;
 
+// TODO: make sure tick based time comparison is accurate
+
 let simulation_running = true,
-	last_infection = Date.now(),
-	delay = 1000 * 10;
+	delay = 1000 * 5;
+
+let scene = [];
+
+let current_tick = 0;
+let spread = []; // [delta_tick, infected, vulnerable, recovered]
+let n_balls = 70;
 
 class Ball {
 	constructor() {
@@ -47,18 +59,18 @@ class Ball {
 		do {
 			this.x = -screen_w/2 + this.r + Math.random() * (screen_w - 2 * this.r);
 			this.y = -screen_h/2 + this.r + Math.random() * (screen_h - 2 * this.r);
-		} while(!is_good_spawn(this.x, this.y));
+		} while(!is_good_spawn(this.x, this.y)); // TODO: safeguard infinite loop
 		let theta = Math.random() * 2 * Math.PI;
-		this.vx = 7 * Math.cos(theta);
-		this.vy = 7 * Math.sin(theta);
+		this.vx = 12 * Math.cos(theta);
+		this.vy = 12 * Math.sin(theta);
 		this.state = Math.random() < 0.05 ? states.infected : states.vulnerable;
-		this.infected_time = this.state == states.infected ? Date.now() : null;
+		this.infected_time = this.state == states.infected ? current_tick : null;
 	}
 	update() {
 		this.x += this.vx * dt;
 		this.y += this.vy * dt;
 		// check our infection time
-		if(this.state == states.infected && Date.now() - this.infected_time >= recovery_time) {
+		if(this.state == states.infected && (current_tick - this.infected_time) * dt * 1000 >= recovery_time) {
 			this.state = states.recovered;
 			this.infected_time = null;
 		}
@@ -106,12 +118,12 @@ class Ball {
 				// do infection
 				if(this.state == states.vulnerable && obj.state == states.infected) {
 					this.state = states.infected;
-					last_infection = this.infected_time = Date.now();
+					this.infected_time = current_tick;
 				}
 				// both ways
 				if(obj.state == states.vulnerable && this.state == states.infected) {
 					obj.state = states.infected;
-					last_infection = obj.infected_time = Date.now();
+					obj.infected_time = current_tick;
 				}
 			}
 		} else if(obj instanceof Line) {
@@ -277,16 +289,10 @@ class Wall {
 	}
 }
 
-let scene = [];
-
-let total_ticks = 0;
-let spread = []; // [delta_tick, infected, vulnerable, recovered]
-let n_balls = 70;
-
 function draw_graph() {
 	if(spread.length == 0)
 		return;
-	let dx = graph.width / total_ticks,
+	let dx = graph.width / current_tick,
 		x,
 		h = graph.height,
 		ph = h - 10;
@@ -318,7 +324,7 @@ function is_good_spawn(x, y) {
 }
 
 function update() {
-	total_ticks++;
+	current_tick++;
 	for(let i = 0; i < scene.length; i++) {
 		for(let j = i + 1; j < scene.length; j++) {
 			scene[i].updateAgainst(scene[j]);
@@ -355,9 +361,10 @@ function update() {
 	
 	document.getElementById("count").innerHTML = `<span style="color: ${grey}">${vulnerable}</span> + <span style="color: ${red}">${infected}</span> + <span style="color: ${blue}">${recovered}</span> = ${vulnerable + infected + recovered}`;
 	
-	//if(Date.now() - last_infection >= delay) {
-	//if(infected == 0 && Date.now() - last_infection >= delay) {
 	if(infected == 0 && spread[spread.length - 1][0] * dt * 1000 >= delay) {
+		// bring graph and count to top for good measure
+		document.getElementById("count").style.zIndex = 3;
+		graph.style.zIndex = 3;
 		simulation_running = false;
 	}
 }
@@ -369,12 +376,19 @@ function render() {
 	draw_graph();
 }
 
+let last_tick = performance.now();
+
 function loop() {
 	window.requestAnimationFrame(loop);
-	if(simulation_running) {
+	let t = performance.now();
+	let did_update = false;
+	if(simulation_running && t - last_tick >= dt * 1000) { // TODO: use while loop?
+		did_update = true;
+		last_tick += dt * 1000;
 		update();
-		render();
 	}
+	if(did_update)
+		render();
 	// print out total kinetic energy (helpful for making sure the physics is right):
 	//let total = 0;
 	//for(let e of scene) {
