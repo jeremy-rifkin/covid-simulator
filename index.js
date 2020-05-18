@@ -219,14 +219,38 @@ class Line {
 		// p1
 		if((bx - this.p1[0]) * (bx - this.p1[0]) + (by - this.p1[1]) * (by - this.p1[1]) <= obj.r * obj.r
 		  && (bx - this.p1[0]) * obj.vx + (by - this.p1[1]) * obj.vy <= 0) {
-			obj.vx *= -1;
-			obj.vy *= -1;
+			// TODO: cleanup - redundant from above.
+			let x = this.p1[0],
+				y = this.p1[1];
+			// collision has occurred
+			// check dot product real quick
+			if((bx - x) * obj.vx + (by - y) * obj.vy <= 0) {
+				// reflect velocity vector
+				let n = [obj.x - x, obj.y - y],
+					n_mag = Math.sqrt(n[0]*n[0] + n[1]*n[1]),
+					v = [obj.vx, obj.vy],
+					v2n = 2 * v[0] * n[0] + 2 * v[1] * n[1];
+				obj.vx = v[0] - v2n / (n_mag * n_mag) * n[0];
+				obj.vy = v[1] - v2n / (n_mag * n_mag) * n[1];
+			}
 		}
 		// p2
 		if((bx - this.p2[0]) * (bx - this.p2[0]) + (by - this.p2[1]) * (by - this.p2[1]) <= obj.r * obj.r
 		  && (bx - this.p2[0]) * obj.vx + (by - this.p2[1]) * obj.vy <= 0) {
-			obj.vx *= -1;
-			obj.vy *= -1;
+			// TODO: cleanup - redundant from above.
+			let x = this.p1[0],
+				y = this.p1[1];
+			// collision has occurred
+			// check dot product real quick
+			if((bx - x) * obj.vx + (by - y) * obj.vy <= 0) {
+				// reflect velocity vector
+				let n = [obj.x - x, obj.y - y],
+					n_mag = Math.sqrt(n[0]*n[0] + n[1]*n[1]),
+					v = [obj.vx, obj.vy],
+					v2n = 2 * v[0] * n[0] + 2 * v[1] * n[1];
+				obj.vx = v[0] - v2n / (n_mag * n_mag) * n[0];
+				obj.vy = v[1] - v2n / (n_mag * n_mag) * n[1];
+			}
 		}
 	}
 	updateAgainst(obj) {
