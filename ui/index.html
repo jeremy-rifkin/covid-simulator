@@ -9,26 +9,36 @@
 		<script src="https://kit.fontawesome.com/2d6e849747.js" crossorigin="anonymous"></script>
 	</head>
 	<body>
-		<canvas id="c"></canvas>
-		<canvas id="graph"></canvas>
-		<div id="count"></div>
-		<div id="controls">
-			<div id="playpause"><i class="fas fa-play"></i></div>
-			<div id="circleadd"><i class="fas fa-plus-circle"></i></div>
-			<div id="pointer"><i class="fas fa-mouse-pointer"></i></div>
-			<div id="drawlines"><i class="fas fa-pencil-ruler"></i></div>
-			<div id="drawwalls"><i class="fas fa-border-none"></i></i></div> <!-- <i class="fas fa-chess-board"> -->
+		<div class="content">
+			text
+			<div id="sim" class="sim">
+				<!--<div class="field"></div>
+				<canvas class="spread_graph"></canvas>
+				<div class="infection_count"></div>
+				<div class="display">
+					Observed R0: <br/>
+					Observed RE: <br/>
+				</div>
+				<div class="controls">
+					<div class="playpause"><i class="fas fa-play"></i></div>
+					<div class="circleadd"><i class="fas fa-plus-circle"></i></div>
+					<div class="pointer"><i class="fas fa-mouse-pointer"></i></div>
+					<div class="drawlines"><i class="fas fa-pencil-ruler"></i></div>
+					<div class="drawwalls"><i class="fas fa-border-none"></i></i></div> <!-- <i class="fas fa-chess-board"> -- >
+				</div>-->
+			</div>
+			text
 		</div>
-		<div id="overlay" style="display: none"></div>
+		<!--<div id="overlay" style="display: none"></div>
 		<div id="modal" style="display: none">
 			<div>Number of balls?</div>
 			<input id="nballs" type="text" style="margin: 20px 0px;"><br/>
 			<div class="wrapper">
 				<div id="submit">Go</div>
 			</div>
-		</div>
+		</div>-->
+		<script src="utils.js"></script>
 		<script src="sim.js"></script>
 		<script src="index.js"></script>
 	</body>
 </html>
-

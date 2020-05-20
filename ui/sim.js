@@ -1,11 +1,24 @@
+let red = "#e56a59",
+	grey = "#c6c6c6",
+	yellow = "#e8e388",
+	blue = "#7dcef1";
+
+let states = {
+	vulnerable: 0,
+	infected: 1,
+	recovered: 2
+};
+
 class Ball {
-	constructor() {
+	constructor(parent) {
+		this.parent = parent; // ref to parent sim instance
 		this.r = 2;
 		this.m = 10;
 		do {
-			this.x = -screen_w/2 + this.r + Math.random() * (screen_w - 2 * this.r);
-			this.y = -screen_h/2 + this.r + Math.random() * (screen_h - 2 * this.r);
-		} while(!is_good_spawn(this.x, this.y)); // TODO: safeguard infinite loop
+			this.x = -this.parent.screen_w/2 + this.r + Math.random() * (this.parent.screen_w - 2 * this.r);
+			this.y = -this.parent.screen_h/2 + this.r + Math.random() * (this.parent.screen_h - 2 * this.r);
+		} while(!this.parent.is_good_spawn(this.x, this.y));
+
 		let theta = Math.random() * 2 * Math.PI;
 		this.vx = 12 * Math.cos(theta);
 		this.vy = 12 * Math.sin(theta);
@@ -13,10 +26,11 @@ class Ball {
 		this.infected_time = this.state == states.infected ? current_tick : null;
 	}
 	update() {
-		this.x += this.vx * dt;
-		this.y += this.vy * dt;
+		//console.log(this);
+		this.x += this.vx * this.parent.dt;
+		this.y += this.vy * this.parent.dt;
 		// check our infection time
-		if(this.state == states.infected && (current_tick - this.infected_time) * dt * 1000 >= recovery_time) {
+		if(this.state == states.infected && (this.parent.current_tick - this.infected_time) * this.parent.dt * 1000 >= this.parent.recovery_time) {
 			this.state = states.recovered;
 			this.infected_time = null;
 		}
@@ -60,16 +74,20 @@ class Ball {
 					obj.vx = v2[0];
 					obj.vy = v2[1];
 				}
-	
+				// technically a collision for both particles, but we will only increment
+				// n_collisions once and it will be multiplied by two later
+				if(this.parent.current_tick >= 60) // TODO: hacky...
+					this.parent.n_collisions++;
+
 				// do infection
 				if(this.state == states.vulnerable && obj.state == states.infected) {
 					this.state = states.infected;
-					this.infected_time = current_tick;
+					this.infected_time = this.parent.current_tick;
 				}
 				// both ways
 				if(obj.state == states.vulnerable && this.state == states.infected) {
 					obj.state = states.infected;
-					obj.infected_time = current_tick;
+					obj.infected_time = this.parent.current_tick;
 				}
 			}
 		} else if(obj instanceof Line) {
@@ -83,33 +101,29 @@ class Ball {
 	draw() {
 		switch(this.state) {
 			case states.vulnerable:
-				ctx.fillStyle = grey;
+				this.parent.ctx.fillStyle = grey;
 				break;
 			case states.infected:
-				ctx.fillStyle = red;
+				this.parent.ctx.fillStyle = red;
 				break;
 			case states.recovered:
-				ctx.fillStyle = blue;
+				this.parent.ctx.fillStyle = blue;
 				break;
 			default:
 				throw "oops";
 		}
-		ctx.beginPath();
-		ctx.arc(...coord_to_screen(this.x, this.y), this.r * px_per_unit, 0, 2 * Math.PI);
-		ctx.fill();
-		//if((mouse_x - this.x) * (mouse_x - this.x) + (mouse_y - this.y) * (mouse_y - this.y) <= this.r * this.r) {
-		//	ctx.strokeStyle = "#000";
-		//	ctx.lineWidth = 2;
-		//	ctx.stroke();
-		//}
+		this.parent.ctx.beginPath();
+		this.parent.ctx.arc(...this.parent.coord_to_screen(this.x, this.y), this.r * this.parent.px_per_unit, 0, 2 * Math.PI);
+		this.parent.ctx.fill();
 	}
 }
 
 class Line {
-	constructor(p1, p2, line=true) {
+	constructor(parent, p1, p2, render_line=true) {
+		this.parent = parent; // ref to parent sim instance
 		this.p1 = p1;
 		this.p2 = p2;
-		this.line = line;
+		this.render_line = render_line;
 	}
 	set(p1, p2) {
 		this.p1 = p1;
@@ -186,19 +200,20 @@ class Line {
 		}
 	}
 	draw() {
-		if(this.line) {
-			ctx.strokeStyle = "#000";
-			ctx.lineWidth = 2;
-			ctx.beginPath();
-			ctx.moveTo(...coord_to_screen(...this.p1));
-			ctx.lineTo(...coord_to_screen(...this.p2));
-			ctx.stroke();
+		if(this.render_line) {
+			this.parent.ctx.strokeStyle = "#000";
+			this.parent.ctx.lineWidth = 2;
+			this.parent.ctx.beginPath();
+			this.parent.ctx.moveTo(...this.parent.coord_to_screen(...this.p1));
+			this.parent.ctx.lineTo(...this.parent.coord_to_screen(...this.p2));
+			this.parent.ctx.stroke();
 		}
 	}
 }
 
 class Wall {
-	constructor(x, y) {
+	constructor(parent, x, y) {
+		this.parent = parent; // ref to parent sim instance
 		let w = 4,
 			h = screen_h;
 		this.left = x - w/2;
@@ -257,4 +272,314 @@ class Wall {
 	}
 }
 
+class Sim {
+	constructor(container) {
+		// build DOM
+		this.container = container;
+
+		this.canvas = document.createElement("canvas");
+		this.canvas.setAttribute("class", "canvas");
+		this.container.appendChild(this.canvas);
+		this.ctx = this.canvas.getContext("2d");
+
+		this.graph = document.createElement("canvas");
+		this.graph.setAttribute("class", "spread_graph");
+		this.container.appendChild(this.graph);
+		this.graph.width = 300;
+		this.graph.height = 200;
+		this.graph_ctx = this.graph.getContext("2d");
+
+		this.infection_count = document.createElement("div");
+		this.infection_count.setAttribute("class", "infection_count");
+		this.container.appendChild(this.infection_count);
+
+		this.r0_display = document.createElement("div");
+		this.r0_display.setAttribute("class", "r0");
+		this.container.appendChild(this.r0_display);
+
+		this.controls = document.createElement("div");
+		this.controls.setAttribute("class", "controls");
+		this.container.appendChild(this.controls);
+
+		this.playpause = document.createElement("div");
+		this.playpause.innerHTML = `<i class="fas fa-play"></i>`;
+		this.playpause.addEventListener("click", this.toggle_running.bind(this), false);
+		this.controls.appendChild(this.playpause);
+
+		this.circleadd = document.createElement("div");
+		this.circleadd.innerHTML = `<i class="fas fa-plus-circle"></i>`;
+		this.circleadd.addEventListener("click", this.add_balls_callback.bind(this), false);
+		this.controls.appendChild(this.circleadd);
+		this.circleadd_overlay = null;
+		this.circleadd_modal = null;
+		
+		// initialize everything else
+		this.screen_px_w = null;
+		this.screen_px_h = null;
+		this.screen_w = null;
+		this.screen_h = null;
+		this.px_per_unit = null;
+		this.units_per_screen = 200;
+
+		this.dt = 1 / 60;
+		this.simulation_running = false;
+		this.force_run = false;
+		this.render_needed = false;
+		this.last_tick = performance.now();
+		this.recovery_time = 1000 * 20;
+		this.delay = 1000 * 5;
+		this.current_tick = 0;
+		this.n_balls = 0;
+		this.n_collisions = 0;
+		this.scene = [];
+		this.spread = []; // [delta_tick, infected, vulnerable, recovered]
+
+		this.borders = [
+			new Line(this, [0, 0], [0, 0], false),
+			new Line(this, [0, 0], [0, 0], false),
+			new Line(this, [0, 0], [0, 0], false),
+			new Line(this, [0, 0], [0, 0], false)
+		];
+		for(let b of this.borders)
+			this.scene.push(b);
+
+		window.addEventListener("resize", this.resize.bind(this), false);
+		this.resize();
+		window.requestAnimationFrame(this.loop.bind(this));
+	}
+	resize() {
+		this.screen_px_w = this.canvas.width = this.container.getBoundingClientRect().width | 0;
+		this.screen_px_h = this.canvas.height = this.screen_px_w * .4 | 0;
+		this.px_per_unit = this.screen_px_w / this.units_per_screen;
+		this.screen_w = this.screen_px_w / this.px_per_unit;
+		this.screen_h = this.screen_px_h / this.px_per_unit;
+		this.container.style.height = this.screen_px_h + "px";
+
+		// redo borders
+		this.borders[0].set([-this.screen_w/2, -this.screen_h/2], [-this.screen_w/2,  this.screen_h/2]); // l
+		this.borders[1].set([ this.screen_w/2, -this.screen_h/2], [ this.screen_w/2,  this.screen_h/2]); // r
+		this.borders[2].set([-this.screen_w/2,  this.screen_h/2], [ this.screen_w/2,  this.screen_h/2]); // t
+		this.borders[3].set([-this.screen_w/2, -this.screen_h/2], [ this.screen_w/2, -this.screen_h/2]); // b
+		// don't trap balls outside the screen
+		// TODO: give objects a .onresize() method?
+		let epsilon = 0.01;
+		for(let e of this.scene)
+			if(e instanceof Ball) {
+				if(e.x < -this.screen_w/2)
+					e.x = -this.screen_w/2 + epsilon;
+				else if(e.x > this.screen_w/2)
+					e.x = this.screen_w/2 - epsilon;
+				if(e.y < -this.screen_h/2)
+					e.y = -this.screen_h/2 + epsilon;
+				else if(e.y > this.screen_h/2)
+					e.y = this.screen_h/2 - epsilon;
+			}
+	}
+	screen_to_coord(x, y) {
+		return [
+			this.screen_w * x / this.screen_px_w - this.screen_w / 2,
+			-(this.screen_h * (y / this.screen_px_h - 1) + this.screen_h / 2)
+		];
+	}
+	coord_to_screen(x, y) {
+		return [
+			(x + (this.screen_w / 2)) / this.screen_w * this.screen_px_w,
+			this.screen_px_h * (1 - (y + (this.screen_h / 2)) / this.screen_h)
+		];
+	}
+	is_good_spawn(x, y) {
+		for(let o of this.scene) {
+			if(o instanceof Wall) {
+				if(between(x, o.left,  o.right) && between(y, o.top,  o.bottom)) {
+					return false;
+				}
+			}
+		}
+		return true;
+	}
+	draw_graph() {
+		if(this.spread.length == 0)
+			return;
+		let dx = this.graph.width / this.current_tick,
+			x,
+			h = this.graph.height,
+			ph = h - 10;
+		this.graph_ctx.clearRect(0, 0, this.graph.width, this.graph.height);
+		this.graph_ctx.lineWidth = 2;
+		let colors = [red, grey, blue];
+		for(let p = 1; p <= 3; p++) {
+			x = 0;
+			this.graph_ctx.strokeStyle = colors[p - 1];
+			this.graph_ctx.beginPath();
+			this.graph_ctx.moveTo(x, h - this.spread[0][p] / this.n_balls * ph);
+			x += dx;
+			for(let i = 1; i < this.spread.length; i++) {
+				this.graph_ctx.lineTo(x, h - this.spread[i][p] / this.n_balls * ph);
+				x += dx * this.spread[i][0];
+			}
+			this.graph_ctx.lineTo(x, h - this.spread[this.spread.length - 1][p] / this.n_balls * ph);
+			this.graph_ctx.stroke();
+		}
+	}
+	get_r0() {
+		let transmission_time = this.recovery_time / 1000,
+			collisions_per_balls_per_second = 2 * this.n_collisions / this.n_balls / ((this.current_tick - 60) / 60); // -60 to compensate for earlier hack
+		return transmission_time * collisions_per_balls_per_second;
+	}
+	update() {
+		this.current_tick++;
+		for(let i = 0; i < this.scene.length; i++) {
+			for(let j = i + 1; j < this.scene.length; j++) {
+				this.scene[i].updateAgainst(this.scene[j]);
+			}
+			this.scene[i].update();
+		}
+		let vulnerable = 0,
+			infected = 0,
+			recovered = 0;
+		for(let e of this.scene) {
+			if(e instanceof Ball) {
+				switch(e.state) {
+					case states.vulnerable:
+						vulnerable++;
+						break;
+					case states.infected:
+						infected++;
+						break;
+					case states.recovered:
+						recovered++;
+						break;
+					default:
+						throw "oops";
+				}
+			}
+		}
+		if(this.spread.length > 0
+		  && infected == this.spread[this.spread.length - 1][1]
+		  && vulnerable == this.spread[this.spread.length - 1][2]
+		  && recovered == this.spread[this.spread.length - 1][3])
+			this.spread[this.spread.length - 1][0]++;
+		else {
+			this.spread.push([1, infected, vulnerable, recovered]);
+			this.infection_count.innerHTML = `<span style="color: ${grey}">${vulnerable}</span> + <span style="color: ${red}">${infected}</span> + <span style="color: ${blue}">${recovered}</span> = ${vulnerable + infected + recovered}`;
+		}
+		// TODO: start cutting off this.spread once it gets really long?
+		// TODO: make it more steppy..
+
+		if(this.current_tick % 10 == 0 && this.current_tick > 60 && this.n_balls > 0) {
+			this.r0_display.innerHTML = `Simulation R0 = ${Math.round(this.get_r0() * 10) / 10}`;
+		}
+		
+		if(!this.force_run && infected == 0 && this.spread[this.spread.length - 1][0] * this.dt * 1000 >= this.delay) {
+			this.pause();
+		}
+	}
+	render() {
+		this.ctx.clearRect(0, 0, this.screen_px_w, this.screen_px_h);
+		for(let e of this.scene)
+			e.draw();
+		this.draw_graph();
+	}
+	loop() {
+		window.requestAnimationFrame(this.loop.bind(this));
+		if(this.simulation_running) {
+			let t = performance.now(),
+				did_update = false;
+			if(t - this.last_tick >= this.dt * 1000) { // TODO: use while loop?
+				did_update = true;
+				this.last_tick += this.dt * 1000;
+				this.update();
+			}
+			if(did_update)
+				this.render();
+			else if(this.render_needed) {
+				this.render_needed = false;
+				this.render();
+			}
+		} else if(this.render_needed) {
+			this.render_needed = false;
+			this.render();
+		}
+	}
+	play() {
+		this.playpause.innerHTML = `<i class="fas fa-pause"></i>`;
+		this.simulation_running = true;
+		let infected = 0;
+		for(let e of this.scene)
+			if(e instanceof Ball && e.state == states.infected)
+				infected++;
+		if(!this.force_run && infected == 0 && this.spread[this.spread.length - 1][0] * this.dt * 1000 >= this.delay)
+			this.force_run = true;
+		// undo potential bring to front
+		this.infection_count.style.zIndex = null;
+		this.graph.style.zIndex = null;
+		this.r0_display.style.zIndex = null;
+	}
+	pause() {
+		this.playpause.innerHTML = `<i class="fas fa-play"></i>`;
+		this.simulation_running = false;
+		// bring graph and count to top for good measure
+		this.infection_count.style.zIndex = 3;
+		this.graph.style.zIndex = 3;
+		this.r0_display.style.zIndex = 3;
+	}
+	toggle_running() {
+		if(this.simulation_running) {
+			this.pause();
+		} else {
+			this.play();
+		}
+	}
+	add_balls_callback() {
+		this.circleadd_overlay = document.createElement("div");
+		this.circleadd_overlay.setAttribute("class", "overlay");
+		this.circleadd_overlay.addEventListener("click", this.close_add_balls_modal.bind(this), false);
+		document.body.appendChild(this.circleadd_overlay);
+
+		let text = document.createElement("div");
+		text.innerHTML = "Number of balls?";
+
+		let input = document.createElement("input");
+		input.type = "text";
+		input.style.margin = "20px 0px";
+		input.addEventListener("keydown", function(e) {
+			if(e.keyCode == 13) {
+				this.do_add_balls(parseInt(input.value));
+				input.value = "";
+			}
+		}.bind(this), false);
+
+		let wrapper = document.createElement("div");
+		wrapper.setAttribute("class", "wrapper");
+
+		let submit = document.createElement("div");
+		submit.setAttribute("class", "submit");
+		submit.innerHTML = "Go";
+		submit.addEventListener("click", function(e) {
+			this.do_add_balls(parseInt(input.value));
+			input.value = "";
+		}.bind(this), false);
+		wrapper.appendChild(submit);
+
+		this.circleadd_modal = document.createElement("div");
+		this.circleadd_modal.setAttribute("class", "modal");
+		this.circleadd_modal.appendChild(text);
+		this.circleadd_modal.appendChild(input);
+		this.circleadd_modal.appendChild(wrapper);
+		document.body.appendChild(this.circleadd_modal);
+		input.focus();
+	}
+	do_add_balls(q) {
+		if(!isNaN(q) && q > 0) {
+			this.n_balls += q;
+			for(let i = 0; i < q; i++)
+				this.scene.push(new Ball(this));
+			this.close_add_balls_modal();
+		}
+	}
+	close_add_balls_modal() {
+		this.circleadd_overlay.remove();
+		this.circleadd_modal.remove();
+	}
+}
 
