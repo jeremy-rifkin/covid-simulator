@@ -223,6 +223,8 @@ class Wall {
 		this.parent = parent; // ref to parent sim instance
 		let w = 4,
 			h = this.parent.screen_h;
+		this.x = x;
+		this.y = y;
 		this.left = x - w/2;
 		this.right = x + w/2;
 		this.top = y + h/2;
@@ -240,7 +242,6 @@ class Wall {
 		this.open_ticks = 0;
 		this.tick_delta = .1;
 		this.selected = false;
-		console.log(this);
 	}
 	open() {
 		this.open_ticks = 120;
@@ -427,7 +428,7 @@ class PointerHandler {
 		if(obj != null) {
 			if(obj instanceof Ball) {
 				obj.state = states.infected;
-				obj.infected_time = current_tick;
+				obj.infected_time = this.parent.current_tick;
 			} else if(obj instanceof Line) {
 
 			} else if(obj instanceof Wall) {
@@ -538,6 +539,20 @@ class Sim {
 			}
 		}.bind(this), false);
 		this.controls.appendChild(this.drawwalls);
+
+		this.download = document.createElement("div");
+		this.download.innerHTML = `<i class="fas fa-download"></i>`;
+		this.download.addEventListener("click", function() {
+			this.download_sim();
+		}.bind(this), false);
+		this.controls.appendChild(this.download);
+
+		this.upload = document.createElement("div");
+		this.upload.innerHTML = `<i class="fas fa-upload"></i>`;
+		this.upload.addEventListener("click", function() {
+			this.upload_sim();
+		}.bind(this), false);
+		this.controls.appendChild(this.upload);
 		
 		// initialize everything else
 		this.screen_px_w = null;
@@ -825,5 +840,94 @@ class Sim {
 			return;
 		this.current_ui_action.deactivate();
 		this.current_ui_action = null;
+	}
+	download_sim() {
+		let sim_props = ["recovery_time", "delay", "current_tick", "n_balls", "n_collisions", "spread"],
+			ball_props = ["r", "m", "x", "y", "vx", "vy", "state", "infected_time"],
+			line_props = ["p1", "p2", "render_line"],
+			wall_props = ["x", "y"];
+		let copy = {};
+		for(let p of sim_props)
+			copy[p] = this[p];
+		copy.scene = [];
+		for(let obj of this.scene) {
+			if(obj instanceof Ball) {
+				let oc = {type: "ball"};
+				for(let p of ball_props)
+					oc[p] = obj[p];
+				copy.scene.push(oc);
+			} else if(obj instanceof Line) {
+				let oc = {type: "line"};
+				for(let p of line_props)
+					oc[p] = obj[p];
+				copy.scene.push(oc);
+			} else if(obj instanceof Wall) {
+				let oc = {type: "wall"};
+				for(let p of wall_props)
+					oc[p] = obj[p];
+				copy.scene.push(oc);
+			}
+		}
+		let data = encodeURIComponent(JSON.stringify(copy));
+		var a = document.createElement("a");
+		a.setAttribute("href", "data:text/plain;charset=utf-8," + data);
+		a.setAttribute("download", "sim.json");
+		a.style.display = "none";
+		document.body.appendChild(a);
+		a.click();
+		a.remove();
+	}
+	upload_sim() {
+		// <input type="file" id="input" multiple>
+		let input = document.createElement("input");
+		input.setAttribute("type", "file");
+		input.style.display = "none";
+		document.body.appendChild(input);
+		input.click();
+		input.addEventListener("change", function() {
+			if(input.files.length != 1) {
+				console.log("crap");
+				input.remove();
+				return;
+			}
+			var reader = new FileReader();
+			reader.onload = function(e) {
+				let data = JSON.parse(e.target.result);
+				let sim_props = ["recovery_time", "delay", "current_tick", "n_balls", "n_collisions", "spread"],
+					ball_props = ["r", "m", "x", "y", "vx", "vy", "state", "infected_time"],
+					line_props = ["p1", "p2", "render_line"],
+					wall_props = ["x", "y"];
+				for(let p of sim_props)
+					this[p] = data[p];
+				this.scene = [];
+				for(let obj of data.scene) {
+					switch(obj.type) {
+						case "ball":
+							let b = new Ball(this);
+							for(let p of ball_props)
+								b[p] = obj[p];
+							this.scene.push(b);
+							break;
+						case "line":
+							let l = new Line(this);
+							for(let p of line_props)
+								l[p] = obj[p];
+							this.scene.push(l);
+							break;
+						case "wall":
+							let w = new Wall(this, obj.x, obj.y);
+							this.scene.push(w);
+							break;
+					}
+				}
+				for(let i = 0; i < 4; i++)
+					this.borders[i] = this.scene[i];
+				this.simulation_running = false;
+				this.force_run = false;
+				this.render_needed = true;
+			}.bind(this);
+			reader.readAsText(input.files[0]);
+			input.remove();
+		}.bind(this), false);
 	}
 }

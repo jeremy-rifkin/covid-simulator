@@ -17,7 +17,7 @@ html, body {
 	width: 100%;
 	position: relative;
 	/*overflow: hidden;*/
-	margin: 70px 0 40px;
+	margin: 90px 0 60px;
 }
 .sim .canvas {
 	position: absolute;
@@ -52,7 +52,6 @@ html, body {
 	z-index: 3;
 	background: #626262;
 	color: #fff;
-	/*border-bottom-right-radius: 5px;*/
 	border-top-left-radius: 5px;
 	border-top-right-radius: 5px;
 	overflow: hidden; /* TODO */
@@ -76,12 +75,6 @@ html, body {
 	bottom: 0;
 	right: 0;
 }
-/*.sim .ghost_wall {
-	position: absolute;
-	height: 100%;
-	border: 2px solid #000;
-	box-sizing: border-box;
-}*/
 
 .overlay {
 	z-index: 10;
