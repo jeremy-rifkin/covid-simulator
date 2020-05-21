@@ -20,8 +20,10 @@ class Ball {
 		} while(!this.parent.is_good_spawn(this.x, this.y));
 
 		let theta = Math.random() * 2 * Math.PI;
-		this.vx = 12 * Math.cos(theta);
-		this.vy = 12 * Math.sin(theta);
+		// 12 is a good speed visually, but 7 will yield R0~2.4 for the current demo TODO
+		this.vx = 7 * Math.cos(theta);
+		this.vy = 7 * Math.sin(theta);
+		this.selected = false;
 		this.state = states.vulnerable;
 		this.infected_time = this.state == states.infected ? current_tick : null;
 	}
@@ -115,6 +117,11 @@ class Ball {
 		this.parent.ctx.beginPath();
 		this.parent.ctx.arc(...this.parent.coord_to_screen(this.x, this.y), this.r * this.parent.px_per_unit, 0, 2 * Math.PI);
 		this.parent.ctx.fill();
+		if(this.selected) {
+			this.parent.ctx.strokeStyle = "#000";
+			this.parent.ctx.lineWidth = 1;
+			this.parent.ctx.stroke();
+		}
 	}
 }
 
@@ -215,23 +222,25 @@ class Wall {
 	constructor(parent, x, y) {
 		this.parent = parent; // ref to parent sim instance
 		let w = 4,
-			h = screen_h;
+			h = this.parent.screen_h;
 		this.left = x - w/2;
 		this.right = x + w/2;
 		this.top = y + h/2;
 		this.bottom = y - h/2;
 		this.edges = [
-			new Line([this.left, this.bottom], [this.left, this.bottom + h / 2]),
-			new Line([this.left, this.bottom + h / 2], [this.right, this.bottom + h / 2]),
-			new Line([this.right, this.bottom], [this.right, this.bottom + h / 2]),
+			new Line(this.parent, [this.left, this.bottom], [this.left, this.bottom + h / 2]),
+			new Line(this.parent, [this.left, this.bottom + h / 2], [this.right, this.bottom + h / 2]),
+			new Line(this.parent, [this.right, this.bottom], [this.right, this.bottom + h / 2]),
 
-			new Line([this.left, this.top], [this.left, this.top - h / 2]),
-			new Line([this.left, this.top - h / 2], [this.right, this.top - h / 2]),
-			new Line([this.right, this.top], [this.right, this.top - h / 2])
+			new Line(this.parent, [this.left, this.top], [this.left, this.top - h / 2]),
+			new Line(this.parent, [this.left, this.top - h / 2], [this.right, this.top - h / 2]),
+			new Line(this.parent, [this.right, this.top], [this.right, this.top - h / 2])
 		];
 		// This is really *really* bad
 		this.open_ticks = 0;
 		this.tick_delta = .1;
+		this.selected = false;
+		console.log(this);
 	}
 	open() {
 		this.open_ticks = 120;
@@ -263,12 +272,191 @@ class Wall {
 		}
 	}
 	draw() {
-		if(!(mouse_x == null || mouse_y == null) && between(mouse_x, this.left, this.right) && between(mouse_y, this.top, this.bottom)) {
-			ctx.fillStyle = "#cdcdcd";
-			ctx.fillRect(...coord_to_screen(this.left, this.top), (this.right - this.left) * px_per_unit, (this.top - this.bottom) * px_per_unit);
+		if(this.selected) {
+			this.parent.ctx.fillStyle = "rgba(205, 205, 205, .4)";
+			this.parent.ctx.fillRect(...this.parent.coord_to_screen(this.left, this.top), (this.right - this.left) * this.parent.px_per_unit, (this.top - this.bottom) * this.parent.px_per_unit);
 		}
 		for(let e of this.edges)
 			e.draw();
+	}
+}
+
+class DrawWallsHandler {
+	constructor(parent) {
+		this.parent = parent;
+
+		this.width = 4;
+		this.x = null;
+
+		this.mousemovehandler = this.mousemove.bind(this);
+		this.parent.canvas.addEventListener("mousemove", this.mousemovehandler, false);
+		this.clickhandler = this.click.bind(this);
+		this.parent.canvas.addEventListener("click", this.clickhandler, false);
+		
+		this.parent.drawwalls.setAttribute("data-selected", "");
+	}
+	click(e) {
+		let rect = this.parent.canvas.getBoundingClientRect();
+		this.x = this.parent.screen_to_coord(e.clientX - rect.left, 0)[0];
+		this.parent.scene.push(new Wall(this.parent, this.x, 0));
+		this.parent.render_needed = true;
+		this.parent.cancel_action();
+	}
+	mousemove(e) {
+		let rect = this.parent.canvas.getBoundingClientRect();
+		this.x = this.parent.screen_to_coord(e.clientX - rect.left, 0)[0];
+		this.parent.render_needed = true;
+	}
+	resize() {
+		// future proofing
+	}
+	deactivate() {
+		this.parent.drawwalls.removeAttribute("data-selected");
+		this.parent.canvas.removeEventListener("mousemove", this.mousemovehandler, false);
+		this.parent.canvas.removeEventListener("click", this.clickhandler, false);
+		this.parent.render_needed = true;
+	}
+	draw() {
+		let x = this.x,
+			w = this.width,
+			h = this.parent.screen_h;
+		let left = x - w/2,
+			right = x + w/2,
+			top = h/2,
+			bottom = -h/2;
+		this.parent.ctx.strokeStyle = "#000";
+		this.parent.ctx.lineWidth = 2;
+		this.parent.ctx.beginPath();
+		this.parent.ctx.moveTo(...this.parent.coord_to_screen(left, bottom));
+		this.parent.ctx.lineTo(...this.parent.coord_to_screen(left, top));
+		this.parent.ctx.lineTo(...this.parent.coord_to_screen(right, top));
+		this.parent.ctx.lineTo(...this.parent.coord_to_screen(right, bottom));
+		this.parent.ctx.lineTo(...this.parent.coord_to_screen(left, bottom));
+		this.parent.ctx.stroke();
+	}
+}
+
+class DrawLinesHandler {
+	constructor(parent) {
+		this.parent = parent;
+
+		this.p1 = null;
+		this.last_xy = null;
+
+		this.mousemovehandler = this.mousemove.bind(this);
+		this.parent.canvas.addEventListener("mousemove", this.mousemovehandler, false);
+		this.clickhandler = this.click.bind(this);
+		this.parent.canvas.addEventListener("click", this.clickhandler, false);
+		
+		this.parent.drawlines.setAttribute("data-selected", "");
+	}
+	click(e) {
+		let rect = this.parent.canvas.getBoundingClientRect(),
+			xy = this.parent.screen_to_coord(e.clientX - rect.left, e.clientY - rect.top);
+		if(this.p1 == null) {
+			this.p1 = xy;
+		} else {
+			this.parent.scene.push(new Line(this.parent, this.p1, xy));
+			this.p1 = null;
+			//this.parent.cancel_action();
+		}
+		this.parent.render_needed = true;
+	}
+	mousemove(e) {
+		let rect = this.parent.canvas.getBoundingClientRect();
+		this.last_xy = this.parent.screen_to_coord(e.clientX - rect.left, e.clientY - rect.top);
+		this.parent.render_needed = true;
+	}
+	resize() {
+		// future proofing
+	}
+	deactivate() {
+		this.parent.drawlines.removeAttribute("data-selected");
+		this.parent.canvas.removeEventListener("mousemove", this.mousemovehandler, false);
+		this.parent.canvas.removeEventListener("click", this.clickhandler, false);
+		this.parent.render_needed = true;
+	}
+	draw() {
+		if(this.p1 != null && this.last_xy != null) {
+			this.parent.ctx.strokeStyle = "#000";
+			this.parent.ctx.lineWidth = 2;
+			this.parent.ctx.beginPath();
+			this.parent.ctx.moveTo(...this.parent.coord_to_screen(...this.p1));
+			this.parent.ctx.lineTo(...this.parent.coord_to_screen(...this.last_xy));
+			this.parent.ctx.stroke();
+		}
+	}
+}
+
+class PointerHandler {
+	constructor(parent) {
+		this.parent = parent;
+
+		this.current_selected = null;
+
+		this.mousemovehandler = this.mousemove.bind(this);
+		this.parent.canvas.addEventListener("mousemove", this.mousemovehandler, false);
+		this.clickhandler = this.click.bind(this);
+		this.parent.canvas.addEventListener("click", this.clickhandler, false);
+		
+		this.parent.pointer.setAttribute("data-selected", "");
+	}
+	analyzePoint(e) {
+		let rect = this.parent.canvas.getBoundingClientRect(),
+			xy = this.parent.screen_to_coord(e.clientX - rect.left, e.clientY - rect.top),
+			x = xy[0],
+			y = xy[1],
+			scene = this.parent.scene;
+		for(let i = scene.length - 1; i >= 0; i--) {
+			if(scene[i] instanceof Ball) {
+				if((x - scene[i].x) * (x - scene[i].x) + (y - scene[i].y) * (y - scene[i].y) <= scene[i].r * scene[i].r) {
+					return scene[i];
+				}
+			} else if(scene[i] instanceof Line) {
+				// TODO
+			} else if(scene[i] instanceof Wall) {
+				if(between(x, scene[i].left, scene[i].right) && between(y, scene[i].top, scene[i].bottom)) {
+					return scene[i];
+				}
+			}
+		}
+		return null;
+	}
+	click(e) {
+		let obj = this.analyzePoint(e);
+		if(obj != null) {
+			if(obj instanceof Ball) {
+				obj.state = states.infected;
+				obj.infected_time = current_tick;
+			} else if(obj instanceof Line) {
+
+			} else if(obj instanceof Wall) {
+				obj.open();
+			}
+			this.parent.render_needed = true;
+		}
+	}
+	mousemove(e) {
+		let obj = this.analyzePoint(e);
+		if(this.current_selected != null) {
+			this.current_selected.selected = false;
+		}
+		this.current_selected = obj;
+		if(this.current_selected != null) {
+			this.current_selected.selected = true;
+		}
+		this.parent.render_needed = true;
+	}
+	resize() {
+		// future proofing
+	}
+	deactivate() {
+		this.parent.pointer.removeAttribute("data-selected");
+		this.parent.canvas.removeEventListener("mousemove", this.mousemovehandler, false);
+		this.parent.canvas.removeEventListener("click", this.clickhandler, false);
+	}
+	draw() {
+		
 	}
 }
 
@@ -312,6 +500,44 @@ class Sim {
 		this.controls.appendChild(this.circleadd);
 		this.circleadd_overlay = null;
 		this.circleadd_modal = null;
+
+		this.current_ui_action = null;
+
+		this.pointer = document.createElement("div");
+		this.pointer.innerHTML = `<i class="fas fa-mouse-pointer"></i>`;
+		this.pointer.addEventListener("click", function() {
+			if(this.current_ui_action instanceof PointerHandler) {
+				this.cancel_action();
+			} else {
+				this.cancel_action();
+				this.current_ui_action = new PointerHandler(this);
+			}
+		}.bind(this), false);
+		this.controls.appendChild(this.pointer);
+
+		this.drawlines = document.createElement("div");
+		this.drawlines.innerHTML = `<i class="fas fa-pencil-ruler"></i>`;
+		this.drawlines.addEventListener("click", function() {
+			if(this.current_ui_action instanceof DrawLinesHandler) {
+				this.cancel_action();
+			} else {
+				this.cancel_action();
+				this.current_ui_action = new DrawLinesHandler(this);
+			}
+		}.bind(this), false);
+		this.controls.appendChild(this.drawlines);
+
+		this.drawwalls = document.createElement("div");
+		this.drawwalls.innerHTML = `<i class="fas fa-border-none"></i>`;
+		this.drawwalls.addEventListener("click", function() {
+			if(this.current_ui_action instanceof DrawWallsHandler) {
+				this.cancel_action();
+			} else {
+				this.cancel_action();
+				this.current_ui_action = new DrawWallsHandler(this);
+			}
+		}.bind(this), false);
+		this.controls.appendChild(this.drawwalls);
 		
 		// initialize everything else
 		this.screen_px_w = null;
@@ -349,7 +575,7 @@ class Sim {
 	}
 	resize() {
 		this.screen_px_w = this.canvas.width = this.container.getBoundingClientRect().width | 0;
-		this.screen_px_h = this.canvas.height = this.screen_px_w * .4 | 0;
+		this.screen_px_h = this.canvas.height = this.screen_px_w * .7 | 0;
 		this.px_per_unit = this.screen_px_w / this.units_per_screen;
 		this.screen_w = this.screen_px_w / this.px_per_unit;
 		this.screen_h = this.screen_px_h / this.px_per_unit;
@@ -374,6 +600,9 @@ class Sim {
 				else if(e.y > this.screen_h/2)
 					e.y = this.screen_h/2 - epsilon;
 			}
+		if(this.current_ui_action)
+			this.current_ui_action.resize();
+		this.render_needed = true;
 	}
 	screen_to_coord(x, y) {
 		return [
@@ -479,6 +708,8 @@ class Sim {
 		for(let e of this.scene)
 			e.draw();
 		this.draw_graph();
+		if(this.current_ui_action)
+			this.current_ui_action.draw();
 	}
 	loop() {
 		window.requestAnimationFrame(this.loop.bind(this));
@@ -514,6 +745,10 @@ class Sim {
 		this.infection_count.style.zIndex = null;
 		this.graph.style.zIndex = null;
 		this.r0_display.style.zIndex = null;
+
+		//this.infection_count.style.background = null;
+		//this.graph.style.background = null;
+		//this.r0_display.style.background = null;
 	}
 	pause() {
 		this.playpause.innerHTML = `<i class="fas fa-play"></i>`;
@@ -522,6 +757,10 @@ class Sim {
 		this.infection_count.style.zIndex = 3;
 		this.graph.style.zIndex = 3;
 		this.r0_display.style.zIndex = 3;
+
+		//this.infection_count.style.background = "rgba(0, 0, 0, .05)";
+		//this.graph.style.background = "rgba(0, 0, 0, .05)";
+		//this.r0_display.style.background = "rgba(0, 0, 0, .05)";
 	}
 	toggle_running() {
 		if(this.simulation_running) {
@@ -581,5 +820,10 @@ class Sim {
 		this.circleadd_overlay.remove();
 		this.circleadd_modal.remove();
 	}
+	cancel_action() {
+		if(this.current_ui_action == null)
+			return;
+		this.current_ui_action.deactivate();
+		this.current_ui_action = null;
+	}
 }
-
