@@ -830,6 +830,7 @@ class Sim {
 				this.scene.push(new Ball(this));
 			this.close_add_balls_modal();
 		}
+		this.render_needed = true;
 	}
 	close_add_balls_modal() {
 		this.circleadd_overlay.remove();
