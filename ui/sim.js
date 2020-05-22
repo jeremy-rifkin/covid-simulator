@@ -463,6 +463,9 @@ class PointerHandler {
 		this.parent.pointer.removeAttribute("data-selected");
 		this.parent.canvas.removeEventListener("mousemove", this.mousemovehandler, false);
 		this.parent.canvas.removeEventListener("click", this.clickhandler, false);
+		if(this.current_selected != null) {
+			this.current_selected.selected = false;
+		}
 	}
 	draw() {
 		
