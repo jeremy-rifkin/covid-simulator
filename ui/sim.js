@@ -348,6 +348,8 @@ class DrawLinesHandler {
 		this.parent.canvas.addEventListener("mousemove", this.mousemovehandler, false);
 		this.clickhandler = this.click.bind(this);
 		this.parent.canvas.addEventListener("click", this.clickhandler, false);
+		this.rightclickhandler = this.rightclick.bind(this);
+		this.parent.canvas.addEventListener("contextmenu", this.rightclickhandler, false);
 		
 		this.parent.drawlines.setAttribute("data-selected", "");
 	}
@@ -358,10 +360,15 @@ class DrawLinesHandler {
 			this.p1 = xy;
 		} else {
 			this.parent.scene.push(new Line(this.parent, this.p1, xy));
-			this.p1 = null;
-			//this.parent.cancel_action();
+			this.p1 = xy;
 		}
 		this.parent.render_needed = true;
+	}
+	rightclick(e) {
+		e.preventDefault();
+		//let rect = this.parent.canvas.getBoundingClientRect(),
+		//	xy = this.parent.screen_to_coord(e.clientX - rect.left, e.clientY - rect.top);
+		this.p1 = null;
 	}
 	mousemove(e) {
 		let rect = this.parent.canvas.getBoundingClientRect();
@@ -375,6 +382,7 @@ class DrawLinesHandler {
 		this.parent.drawlines.removeAttribute("data-selected");
 		this.parent.canvas.removeEventListener("mousemove", this.mousemovehandler, false);
 		this.parent.canvas.removeEventListener("click", this.clickhandler, false);
+		this.parent.canvas.removeEventListener("contextmenu", this.rightclickhandler, false);
 		this.parent.render_needed = true;
 	}
 	draw() {
@@ -923,7 +931,7 @@ class Sim {
 				}
 				for(let i = 0; i < 4; i++)
 					this.borders[i] = this.scene[i];
-				this.simulation_running = false;
+				this.pause();
 				this.force_run = false;
 				this.render_needed = true;
 			}.bind(this);
