@@ -243,6 +243,25 @@ class Wall {
 			new Line(this.parent, [this.right, this.top        ], [this.right, this.top - h / 2])
 		];
 		this.selected = false;
+		this.resolve_balls();
+	}
+	resolve_balls() {
+		for(let e of this.parent.scene) {
+			if(e instanceof Ball) {
+				if(between(e.x, this.left, this.right)) {
+					if(between(e.y, this.top, this.top - this.h / 2 + this.opening)
+					|| between(e.y, this.bottom, this.bottom + this.h / 2 - this.opening)) {
+						let epsilon = 0.01;
+						if(e.x < this.x) {
+							e.x = this.left - epsilon;
+						} else {
+							e.x = this.right + epsilon;
+						}
+					}
+				}
+			}
+		}
+		this.parent.render_needed = true;
 	}
 	update_opening() {
 		this.edges[0].p2[1] = this.bottom + this.h / 2 - this.opening;
@@ -254,6 +273,7 @@ class Wall {
 		this.edges[4].p2[1] = this.top - this.h / 2 + this.opening;
 		this.edges[5].p2[1] = this.top - this.h / 2 + this.opening;
 		this.edges[4].p1[1] = this.top - this.h / 2 + this.opening;
+		this.resolve_balls();
 	}
 	update() {
 		
@@ -291,6 +311,8 @@ class DrawWallsHandler {
 		this.parent.canvas.addEventListener("mousemove", this.mousemovehandler, false);
 		this.clickhandler = this.click.bind(this);
 		this.parent.canvas.addEventListener("click", this.clickhandler, false);
+		this.rightclickhandler = this.rightclick.bind(this);
+		this.parent.canvas.addEventListener("contextmenu", this.rightclickhandler, false);
 		
 		this.parent.drawwalls.setAttribute("data-selected", "");
 	}
@@ -299,6 +321,10 @@ class DrawWallsHandler {
 		this.x = this.parent.screen_to_coord(e.clientX - rect.left, 0)[0];
 		this.parent.scene.push(new Wall(this.parent, this.x, 0));
 		this.parent.render_needed = true;
+	}
+	rightclick(e) {
+		e.preventDefault();
+		this.parent.cancel_action();
 	}
 	mousemove(e) {
 		let rect = this.parent.canvas.getBoundingClientRect();
@@ -312,6 +338,7 @@ class DrawWallsHandler {
 		this.parent.drawwalls.removeAttribute("data-selected");
 		this.parent.canvas.removeEventListener("mousemove", this.mousemovehandler, false);
 		this.parent.canvas.removeEventListener("click", this.clickhandler, false);
+		this.parent.canvas.removeEventListener("contextmenu", this.rightclickhandler, false);
 		this.parent.render_needed = true;
 	}
 	draw() {
