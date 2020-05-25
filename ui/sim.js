@@ -83,15 +83,21 @@ class Ball {
 
 				// do infection
 				if(this.state == states.vulnerable && obj.state == states.infected) {
-					this.state = states.infected;
-					this.infected_time = this.parent.current_tick;
-					obj.reproduction_count++;
+					// do infection chance
+					if(Math.random() <= this.parent.default_sim_props.transmission_rate) {
+						this.state = states.infected;
+						this.infected_time = this.parent.current_tick;
+						obj.reproduction_count++;
+					}
 				}
 				// both ways
 				if(obj.state == states.vulnerable && this.state == states.infected) {
-					obj.state = states.infected;
-					obj.infected_time = this.parent.current_tick;
-					this.reproduction_count++;
+					// do infection chance
+					if(Math.random() <= this.parent.default_sim_props.transmission_rate) {
+						obj.state = states.infected;
+						obj.infected_time = this.parent.current_tick;
+						this.reproduction_count++;
+					}
 				}
 			}
 		} else if(obj instanceof Line) {
@@ -313,7 +319,7 @@ class DrawWallsHandler {
 		this.parent.canvas.addEventListener("click", this.clickhandler, false);
 		this.rightclickhandler = this.rightclick.bind(this);
 		this.parent.canvas.addEventListener("contextmenu", this.rightclickhandler, false);
-		
+
 		this.parent.drawwalls.setAttribute("data-selected", "");
 	}
 	click(e) {
@@ -501,7 +507,7 @@ class PointerHandler {
 		this.parent.pointer.removeAttribute("data-selected");
 		this.parent.canvas.removeEventListener("mousemove", this.mousemovehandler, false);
 		this.parent.canvas.removeEventListener("click", this.clickhandler, false);
-		this.parent.canvas.removeEventListener("wheel", this.wheelandler, false);
+		this.parent.canvas.removeEventListener("wheel", this.wheelhandler, false);
 		if(this.current_selected != null) {
 			this.current_selected.selected = false;
 		}
@@ -620,6 +626,7 @@ class Sim {
 			this.radius = 2;
 			this.velocity = 7;
 			this.wall_openings = 0;
+			this.transmission_rate = 1;
 		}
 		this.default_sim_props = new sim_props_class();
 		var dat_gui = new dat.GUI({autoPlace: false});
@@ -654,11 +661,14 @@ class Sim {
 			}
 			this.render_needed = true;
 		}.bind(this));
+		let dat_transmission = dat_gui.add(this.default_sim_props, "transmission_rate", 0, 1, 0.01);
+		//dat_transmission.onChange(function(v) {}.bind(this));
 		// this is hacky and bad
 		this.update_dat = function() {
 			dat_radius.updateDisplay();
 			dat_velocity.updateDisplay();
 			dat_wall.updateDisplay();
+			dat_transmission.updateDisplay();
 		}.bind(this);
 
 		// initialize everything else
@@ -910,7 +920,7 @@ class Sim {
 		if(this.simulation_running) {
 			let t = performance.now(),
 				did_update = false;
-			if(t - this.last_tick >= this.dt * 1000) { // TODO: use while loop?
+			while(t - this.last_tick >= this.dt * 1000) {
 				did_update = true;
 				this.last_tick += this.dt * 1000;
 				this.update();
@@ -1035,7 +1045,8 @@ class Sim {
 		copy["default_sim_props"] = {
 			radius: this.default_sim_props.radius,
 			velocity: this.default_sim_props.velocity,
-			wall_openings: this.default_sim_props.wall_openings
+			wall_openings: this.default_sim_props.wall_openings,
+			transmission_rate: this.default_sim_props.transmission_rate
 		}
 		copy.scene = [];
 		for(let obj of this.scene) {
@@ -1090,6 +1101,7 @@ class Sim {
 				this.default_sim_props.radius = data.default_sim_props.radius;
 				this.default_sim_props.velocity = data.default_sim_props.velocity;
 				this.default_sim_props.wall_openings = data.default_sim_props.wall_openings;
+				this.default_sim_props.transmission_rate = data.default_sim_props.transmission_rate;
 				this.update_dat();
 				this.scene = [];
 				for(let obj of data.scene) {
