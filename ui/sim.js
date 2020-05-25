@@ -12,7 +12,7 @@ let states = {
 class Ball {
 	constructor(parent) {
 		this.parent = parent; // ref to parent sim instance
-		this.r = 2;
+		this.r = this.parent.default_sim_props.radius;
 		this.m = 10;
 		do {
 			this.x = -this.parent.screen_w/2 + this.r + Math.random() * (this.parent.screen_w - 2 * this.r);
@@ -20,12 +20,12 @@ class Ball {
 		} while(!this.parent.is_good_spawn(this.x, this.y));
 
 		let theta = Math.random() * 2 * Math.PI;
-		// 12 is a good speed visually, but 7 will yield R0~2.4 for the current demo TODO
-		this.vx = 7 * Math.cos(theta);
-		this.vy = 7 * Math.sin(theta);
+		this.vx = this.parent.default_sim_props.velocity * Math.cos(theta);
+		this.vy = this.parent.default_sim_props.velocity * Math.sin(theta);
 		this.selected = false;
 		this.state = states.vulnerable;
 		this.infected_time = this.state == states.infected ? current_tick : null;
+		this.reproduction_count = 0;
 	}
 	update() {
 		//console.log(this);
@@ -34,7 +34,7 @@ class Ball {
 		// check our infection time
 		if(this.state == states.infected && (this.parent.current_tick - this.infected_time) * this.parent.dt * 1000 >= this.parent.recovery_time) {
 			this.state = states.recovered;
-			this.infected_time = null;
+			//this.infected_time = null;
 		}
 	}
 	rotate(v, theta) {
@@ -85,11 +85,13 @@ class Ball {
 				if(this.state == states.vulnerable && obj.state == states.infected) {
 					this.state = states.infected;
 					this.infected_time = this.parent.current_tick;
+					obj.reproduction_count++;
 				}
 				// both ways
 				if(obj.state == states.vulnerable && this.state == states.infected) {
 					obj.state = states.infected;
 					obj.infected_time = this.parent.current_tick;
+					this.reproduction_count++;
 				}
 			}
 		} else if(obj instanceof Line) {
@@ -225,40 +227,36 @@ class Wall {
 			h = this.parent.screen_h;
 		this.x = x;
 		this.y = y;
+		this.h = h;
 		this.left = x - w/2;
 		this.right = x + w/2;
 		this.top = y + h/2;
 		this.bottom = y - h/2;
+		this.opening = 0;
 		this.edges = [
-			new Line(this.parent, [this.left, this.bottom], [this.left, this.bottom + h / 2]),
-			new Line(this.parent, [this.left, this.bottom + h / 2], [this.right, this.bottom + h / 2]),
-			new Line(this.parent, [this.right, this.bottom], [this.right, this.bottom + h / 2]),
+			new Line(this.parent, [this.left,  this.bottom        ], [this.left,  this.bottom + h / 2]),
+			new Line(this.parent, [this.left,  this.bottom + h / 2], [this.right, this.bottom + h / 2]),
+			new Line(this.parent, [this.right, this.bottom        ], [this.right, this.bottom + h / 2]),
 
-			new Line(this.parent, [this.left, this.top], [this.left, this.top - h / 2]),
-			new Line(this.parent, [this.left, this.top - h / 2], [this.right, this.top - h / 2]),
-			new Line(this.parent, [this.right, this.top], [this.right, this.top - h / 2])
+			new Line(this.parent, [this.left,  this.top        ], [this.left,  this.top - h / 2]),
+			new Line(this.parent, [this.left,  this.top - h / 2], [this.right, this.top - h / 2]),
+			new Line(this.parent, [this.right, this.top        ], [this.right, this.top - h / 2])
 		];
-		// This is really *really* bad
-		this.open_ticks = 0;
-		this.tick_delta = .1;
 		this.selected = false;
 	}
-	open() {
-		this.open_ticks = 120;
+	update_opening() {
+		this.edges[0].p2[1] = this.bottom + this.h / 2 - this.opening;
+		this.edges[1].p2[1] = this.bottom + this.h / 2 - this.opening;
+		this.edges[2].p2[1] = this.bottom + this.h / 2 - this.opening;
+		this.edges[1].p1[1] = this.bottom + this.h / 2 - this.opening;
+
+		this.edges[3].p2[1] = this.top - this.h / 2 + this.opening;
+		this.edges[4].p2[1] = this.top - this.h / 2 + this.opening;
+		this.edges[5].p2[1] = this.top - this.h / 2 + this.opening;
+		this.edges[4].p1[1] = this.top - this.h / 2 + this.opening;
 	}
 	update() {
-		if(this.open_ticks) {
-			this.open_ticks--;
-			this.edges[0].p2[1] -= this.tick_delta;
-			this.edges[1].p2[1] -= this.tick_delta;
-			this.edges[2].p2[1] -= this.tick_delta;
-			this.edges[1].p1[1] -= this.tick_delta;
-
-			this.edges[3].p2[1] += this.tick_delta;
-			this.edges[4].p2[1] += this.tick_delta;
-			this.edges[5].p2[1] += this.tick_delta;
-			this.edges[4].p1[1] += this.tick_delta;
-		}
+		
 	}
 	updateAgainst(obj) {
 		if(obj instanceof Ball) {
@@ -301,7 +299,6 @@ class DrawWallsHandler {
 		this.x = this.parent.screen_to_coord(e.clientX - rect.left, 0)[0];
 		this.parent.scene.push(new Wall(this.parent, this.x, 0));
 		this.parent.render_needed = true;
-		this.parent.cancel_action();
 	}
 	mousemove(e) {
 		let rect = this.parent.canvas.getBoundingClientRect();
@@ -407,6 +404,8 @@ class PointerHandler {
 		this.parent.canvas.addEventListener("mousemove", this.mousemovehandler, false);
 		this.clickhandler = this.click.bind(this);
 		this.parent.canvas.addEventListener("click", this.clickhandler, false);
+		this.wheelhandler = this.wheel.bind(this);
+		this.parent.canvas.addEventListener("wheel", this.wheelhandler, false);
 		
 		this.parent.pointer.setAttribute("data-selected", "");
 	}
@@ -440,7 +439,7 @@ class PointerHandler {
 			} else if(obj instanceof Line) {
 
 			} else if(obj instanceof Wall) {
-				obj.open();
+				
 			}
 			this.parent.render_needed = true;
 		}
@@ -456,6 +455,18 @@ class PointerHandler {
 		}
 		this.parent.render_needed = true;
 	}
+	wheel(e) {
+		//console.log(e);
+		let obj = this.analyzePoint(e);
+		if(obj != null && obj instanceof Wall) {
+			e.preventDefault();
+			obj.opening += e.deltaY / 2;
+			if(obj.opening < 0)
+				obj.opening = 0;
+			obj.update_opening();
+			this.parent.render_needed = true;
+		}
+	}
 	resize() {
 		// future proofing
 	}
@@ -463,6 +474,7 @@ class PointerHandler {
 		this.parent.pointer.removeAttribute("data-selected");
 		this.parent.canvas.removeEventListener("mousemove", this.mousemovehandler, false);
 		this.parent.canvas.removeEventListener("click", this.clickhandler, false);
+		this.parent.canvas.removeEventListener("wheel", this.wheelandler, false);
 		if(this.current_selected != null) {
 			this.current_selected.selected = false;
 		}
@@ -488,6 +500,13 @@ class Sim {
 		this.graph.width = 300;
 		this.graph.height = 200;
 		this.graph_ctx = this.graph.getContext("2d");
+
+		this.re_graph = document.createElement("canvas");
+		this.re_graph.setAttribute("class", "re_graph");
+		this.container.appendChild(this.re_graph);
+		this.re_graph.width = 400;
+		this.re_graph.height = 300;
+		this.re_graph_ctx = this.re_graph.getContext("2d");
 
 		this.infection_count = document.createElement("div");
 		this.infection_count.setAttribute("class", "infection_count");
@@ -564,7 +583,57 @@ class Sim {
 			this.upload_sim();
 		}.bind(this), false);
 		this.controls.appendChild(this.upload);
+
+		this.reset = document.createElement("div");
+		this.reset.innerHTML = `<i class="fas fa-undo"></i>`;
+		this.reset.addEventListener("click", this.reset_sim.bind(this), false);
+		this.controls.appendChild(this.reset);
 		
+		function sim_props_class() {
+			this.radius = 2;
+			this.velocity = 7;
+			this.wall_openings = 0;
+		}
+		this.default_sim_props = new sim_props_class();
+		var dat_gui = new dat.GUI({autoPlace: false});
+		this.container.appendChild(dat_gui.domElement);
+		let dat_radius = dat_gui.add(this.default_sim_props, "radius", 0.1, 5);
+		dat_radius.onChange(function(v) {
+			for(let e of this.scene) {
+				if(e instanceof Ball) {
+					e.r = v;
+				}
+			}
+			this.render_needed = true;
+		}.bind(this));
+		let dat_velocity = dat_gui.add(this.default_sim_props, "velocity", 0.1, 20);
+		dat_velocity.onChange(function(v) {
+			for(let e of this.scene) {
+				if(e instanceof Ball) {
+					let m = Math.sqrt(e.vx * e.vx + e.vy * e.vy);
+					e.vx *= v / m;
+					e.vy *= v / m;
+				}
+			}
+			this.render_needed = true;
+		}.bind(this));
+		let dat_wall = dat_gui.add(this.default_sim_props, "wall_openings", 0, 40);
+		dat_wall.onChange(function(v) {
+			for(let e of this.scene) {
+				if(e instanceof Wall) {
+					e.opening = v;
+					e.update_opening();
+				}
+			}
+			this.render_needed = true;
+		}.bind(this));
+		// this is hacky and bad
+		this.update_dat = function() {
+			dat_radius.updateDisplay();
+			dat_velocity.updateDisplay();
+			dat_wall.updateDisplay();
+		}.bind(this);
+
 		// initialize everything else
 		this.screen_px_w = null;
 		this.screen_px_h = null;
@@ -652,14 +721,16 @@ class Sim {
 		}
 		return true;
 	}
-	draw_graph() {
+	draw_graphs() {
+		this.graph_ctx.clearRect(0, 0, this.graph.width, this.graph.height);
+		this.re_graph_ctx.clearRect(0, 0, this.re_graph.width, this.re_graph.height);
 		if(this.spread.length == 0)
 			return;
+		// spread graph
 		let dx = this.graph.width / this.current_tick,
 			x,
 			h = this.graph.height,
 			ph = h - 10;
-		this.graph_ctx.clearRect(0, 0, this.graph.width, this.graph.height);
 		this.graph_ctx.lineWidth = 2;
 		let colors = [red, grey, blue];
 		for(let p = 1; p <= 3; p++) {
@@ -675,6 +746,75 @@ class Sim {
 			this.graph_ctx.lineTo(x, h - this.spread[this.spread.length - 1][p] / this.n_balls * ph);
 			this.graph_ctx.stroke();
 		}
+		// R_E graph
+		dx = (this.re_graph.width - 100) / this.current_tick;
+		x = 0;
+		h = this.re_graph.height - 100;
+		ph = h - 10;
+		this.re_graph_ctx.lineWidth = 2;
+		/*let r0 = this.get_r0(),
+			m_length = 20,
+			moving_buffer = [],
+			m_av = () => {
+				let s = 0;
+				for(let e of moving_buffer)
+					s += e;
+				return s / moving_buffer.length;
+			};
+		this.re_graph_ctx.beginPath();
+		this.re_graph_ctx.moveTo(x, h - this.spread[0][2] / this.n_balls * ph);
+		moving_buffer.push(this.spread[0][2]);
+		x += dx;
+		for(let i = 1; i < this.spread.length; i++) {
+			moving_buffer.push(this.spread[i][2]);
+			if(moving_buffer.length > m_length)
+				moving_buffer.shift();
+			//console.log(moving_buffer);
+			//this.re_graph_ctx.lineTo(x, h - this.spread[i][2] / this.n_balls * ph);
+			this.re_graph_ctx.lineTo(x, h - m_av() / this.n_balls * ph);
+			x += dx * this.spread[i][0];
+		}*/
+		let r0 = this.get_r0();
+		// TODO: r0-re consistency
+		let max_vuln = this.n_balls; //this.spread[0][2];
+		//for(let i = 1; i < this.spread.length; i++) {
+		//	if(this.spread[i][2] > max_vuln){
+		//		max_vuln = this.spread[i][2];
+		//	}
+		//}
+		this.re_graph_ctx.font = "14px Arial";
+		this.re_graph_ctx.textBaseline = "middle";
+		this.re_graph_ctx.textAlign = "center";
+		this.re_graph_ctx.fillStyle = "#dcdcdc";
+		this.re_graph_ctx.strokeStyle = "#dcdcdc";
+		let lines = [1, .5, .25, 0];
+		for(let p of lines) {
+			this.re_graph_ctx.beginPath();
+			this.re_graph_ctx.moveTo(0, h - p * max_vuln / this.n_balls * ph);
+			this.re_graph_ctx.lineTo(this.re_graph.width - 100, h - p * max_vuln / this.n_balls * ph);
+			this.re_graph_ctx.stroke();
+
+			let textbox = this.re_graph_ctx.measureText((r0 * p * max_vuln / this.n_balls).toFixed(1));
+			//this.re_graph_ctx.fillStyle = "#fff";
+			//this.re_graph_ctx.fillRect((this.re_graph.width - 100) / 2 - textbox.width / 2 - 3, h - p * max_vuln / this.n_balls * ph - 2, textbox.width + 6, 4);
+			this.re_graph_ctx.clearRect((this.re_graph.width - 100) / 2 - textbox.width / 2 - 3, h - p * max_vuln / this.n_balls * ph - 2, textbox.width + 6, 4);
+			//this.re_graph_ctx.fillStyle = "#dcdcdc";
+			this.re_graph_ctx.fillText((r0 * p * max_vuln / this.n_balls).toFixed(1), (this.re_graph.width - 100) / 2, h - p * max_vuln / this.n_balls * ph);
+		}
+
+		this.re_graph_ctx.strokeStyle = "#000";
+		this.re_graph_ctx.beginPath();
+		this.re_graph_ctx.moveTo(x, h - this.spread[0][2] / this.n_balls * ph);
+		x += dx;
+		for(let i = 1; i < this.spread.length; i++) {
+			this.re_graph_ctx.lineTo(x, h - this.spread[i][2] / this.n_balls * ph);
+			x += dx * this.spread[i][0];
+		}
+		this.re_graph_ctx.lineTo(x, h - this.spread[this.spread.length - 1][2] / this.n_balls * ph);
+		this.re_graph_ctx.textAlign = "left";
+		this.re_graph_ctx.fillStyle = "#3c3c3c";
+		this.re_graph_ctx.fillText("R effective", x + 5, h - this.spread[this.spread.length - 1][2] / this.n_balls * ph);
+		this.re_graph_ctx.stroke();
 	}
 	get_r0() {
 		let transmission_time = this.recovery_time / 1000,
@@ -722,10 +862,11 @@ class Sim {
 		// TODO: make it more steppy..
 
 		if(this.current_tick % 10 == 0 && this.current_tick > 60 && this.n_balls > 0) {
-			this.r0_display.innerHTML = `Simulation R0 = ${Math.round(this.get_r0() * 10) / 10}`;
+			//this.r0_display.innerHTML = `Simulation R0 = ${Math.round(this.get_r0() * 10) / 10}`;
+			this.r0_display.innerHTML = `Simulation R0 = ${this.get_r0().toFixed(1)}`;
 		}
 		
-		if(!this.force_run && infected == 0 && this.spread[this.spread.length - 1][0] * this.dt * 1000 >= this.delay) {
+		if(!this.force_run && infected == 0 && this.spread.length > 0 && this.spread[this.spread.length - 1][0] * this.dt * 1000 >= this.delay) {
 			this.pause();
 		}
 	}
@@ -733,7 +874,7 @@ class Sim {
 		this.ctx.clearRect(0, 0, this.screen_px_w, this.screen_px_h);
 		for(let e of this.scene)
 			e.draw();
-		this.draw_graph();
+		this.draw_graphs();
 		if(this.current_ui_action)
 			this.current_ui_action.draw();
 	}
@@ -761,15 +902,17 @@ class Sim {
 	play() {
 		this.playpause.innerHTML = `<i class="fas fa-pause"></i>`;
 		this.simulation_running = true;
+		this.last_tick = performance.now();
 		let infected = 0;
 		for(let e of this.scene)
 			if(e instanceof Ball && e.state == states.infected)
 				infected++;
-		if(!this.force_run && infected == 0 && this.spread[this.spread.length - 1][0] * this.dt * 1000 >= this.delay)
+		if(!this.force_run && infected == 0 && this.spread.length > 0 && this.spread[this.spread.length - 1][0] * this.dt * 1000 >= this.delay)
 			this.force_run = true;
 		// undo potential bring to front
 		this.infection_count.style.zIndex = null;
 		this.graph.style.zIndex = null;
+		this.re_graph.style.zIndex = null;
 		this.r0_display.style.zIndex = null;
 
 		//this.infection_count.style.background = null;
@@ -782,6 +925,7 @@ class Sim {
 		// bring graph and count to top for good measure
 		this.infection_count.style.zIndex = 3;
 		this.graph.style.zIndex = 3;
+		this.re_graph.style.zIndex = 3;
 		this.r0_display.style.zIndex = 3;
 
 		//this.infection_count.style.background = "rgba(0, 0, 0, .05)";
@@ -857,10 +1001,15 @@ class Sim {
 		let sim_props = ["recovery_time", "delay", "current_tick", "n_balls", "n_collisions", "spread"],
 			ball_props = ["r", "m", "x", "y", "vx", "vy", "state", "infected_time"],
 			line_props = ["p1", "p2", "render_line"],
-			wall_props = ["x", "y"];
+			wall_props = ["x", "y", "opening"];
 		let copy = {};
 		for(let p of sim_props)
 			copy[p] = this[p];
+		copy["default_sim_props"] = {
+			radius: this.default_sim_props.radius,
+			velocity: this.default_sim_props.velocity,
+			wall_openings: this.default_sim_props.wall_openings
+		}
 		copy.scene = [];
 		for(let obj of this.scene) {
 			if(obj instanceof Ball) {
@@ -908,9 +1057,13 @@ class Sim {
 				let sim_props = ["recovery_time", "delay", "current_tick", "n_balls", "n_collisions", "spread"],
 					ball_props = ["r", "m", "x", "y", "vx", "vy", "state", "infected_time"],
 					line_props = ["p1", "p2", "render_line"],
-					wall_props = ["x", "y"];
+					wall_props = ["x", "y", "opening"];
 				for(let p of sim_props)
 					this[p] = data[p];
+				this.default_sim_props.radius = data.default_sim_props.radius;
+				this.default_sim_props.velocity = data.default_sim_props.velocity;
+				this.default_sim_props.wall_openings = data.default_sim_props.wall_openings;
+				this.update_dat();
 				this.scene = [];
 				for(let obj of data.scene) {
 					switch(obj.type) {
@@ -928,6 +1081,8 @@ class Sim {
 							break;
 						case "wall":
 							let w = new Wall(this, obj.x, obj.y);
+							w.opening = obj.opening;
+							w.update_opening();
 							this.scene.push(w);
 							break;
 					}
@@ -941,5 +1096,22 @@ class Sim {
 			reader.readAsText(input.files[0]);
 			input.remove();
 		}.bind(this), false);
+	}
+	reset_sim() {
+		this.pause();
+		this.cancel_action();
+		this.simulation_running = false;
+		this.force_run = false;
+		this.last_tick = performance.now();
+		this.recovery_time = 1000 * 20;
+		this.delay = 1000 * 5;
+		this.current_tick = 0;
+		this.n_balls = 0;
+		this.n_collisions = 0;
+		this.scene = [];
+		this.spread = [];
+		this.render_needed = true;
+		this.infection_count.innerHTML = "";
+		this.r0_display.innerHTML = "";
 	}
 }
