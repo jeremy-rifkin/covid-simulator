@@ -14,16 +14,34 @@
 
 			<h1>COVID-19 simulator</h1>
 
-			<p>This is a basic simulation of the spread of COVID-19. Click the
-			<i class="fas fa-plus-circle"></i> icon to add balls to the simulation. These balls
-			represent people. Use the <i class="fas fa-mouse-pointer"></i> tool to mark balls as
-			infected. Scroll with the <i class="fas fa-mouse-pointer"></i> tool to open and close
-			walls. The <i class="fas fa-pencil-ruler"></i> tool can be used to draw lines on the
-			field - these serve as barriers to the spread of the virus. The
-			<i class="fas fa-border-none"></i> tool will add walls to the field. These barriers can
-			be opened or closed increase / decrease the spread of the virus. The download and upload
-			icons can be used to save / load simulations. The <i class="fas fa-undo"></i> icon will
-			reset the simulation.</p>
+			<div class="text">
+				<p>This is a basic simulation of the spread of COVID-19. <span style="font-weight: bold; color: #c6c6c6;">Grey</span> balls represent people who are vulnerable to the virus, <span style="font-weight: bold; color: #e56a59;">red</span> balls represent infected people, and <span style="font-weight: bold; color: #7dcef1;">blue</span> represents people who have recovered from the virus and are immune (we will assume reinfection can't happen).</p>
+				<div class="il">
+					<div><i class="fas fa-plus-circle"></i></div>
+					<p>Add people to the simulation field.</p>
+				</div>
+				<div class="il">
+					<div><i class="fas fa-mouse-pointer"></i></div>
+					<p>Left click with the pointer tool to mark a ball as infected and use the scroll wheel to open / close walls.</p>
+				</div>
+				<div class="il">
+					<div><i class="fas fa-border-none"></i></div>
+					<p>Walls serve as barriers to the spread of the virus and can be opened and closed. Right click to cancel placing walls.</p>
+				</div>
+				<div class="il">
+					<div><i class="fas fa-pencil-ruler"></i></div>
+					<p>You can draw lines on the field which impede spreading the virus. Right click to cancel drawing lines.</p>
+				</div>
+				<div class="il">
+					<div><i class="fas fa-download"></i></div>
+					<p>A simulation's state can be saved and reloaded it later.</p>
+				</div>
+				<div class="il">
+					<div><i class="fas fa-undo"></i></div>
+					<p>Reset the simulation to a blank slate.</p>
+				</div>
+				<p>The control panel on the right of the simulation can be used to tweak some simulation properties.</p>
+			</div>
 			
 			<div id="sim" class="sim"></div>
 

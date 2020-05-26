@@ -992,6 +992,8 @@ class Sim {
 			if(e.keyCode == 13) {
 				this.do_add_balls(parseInt(input.value));
 				input.value = "";
+			} else if(e.keyCode == 27) {
+				this.close_add_balls_modal();
 			}
 		}.bind(this), false);
 
