@@ -622,13 +622,36 @@ class Sim {
 		this.reset.addEventListener("click", this.reset_sim.bind(this), false);
 		this.controls.appendChild(this.reset);
 		
-		function sim_props_class() {
+		function sim_props_class(pr) {
 			this.radius = 2;
 			this.velocity = 7;
 			this.wall_openings = 0;
 			this.transmission_rate = 1;
+			this.infection_duration = 20; // TODO
+			this.reset_to_default = function() {
+				this.radius = 2;
+				this.velocity = 7;
+				this.wall_openings = 0;
+				this.transmission_rate = 1;
+				this.infection_duration = 20;
+				pr.update_dat();
+			}.bind(this);
 		}
-		this.default_sim_props = new sim_props_class();
+		this.default_sim_props = new sim_props_class(this);
+
+		// check for saved props
+		if(localStorage.getItem("default_sim_props") != null) {
+			try {
+				let props = JSON.parse(localStorage.getItem("default_sim_props"));
+				for(let prop in props) {
+					this.default_sim_props[prop] = props[prop];
+				}
+			} catch {}
+		}
+		let save_props = function() {
+			localStorage.setItem("default_sim_props", JSON.stringify(this.default_sim_props));
+		}.bind(this);
+
 		var dat_gui = new dat.GUI({autoPlace: false});
 		this.container.appendChild(dat_gui.domElement);
 		let dat_radius = dat_gui.add(this.default_sim_props, "radius", 0.1, 5);
@@ -639,8 +662,9 @@ class Sim {
 				}
 			}
 			this.render_needed = true;
+			save_props();
 		}.bind(this));
-		let dat_velocity = dat_gui.add(this.default_sim_props, "velocity", 0.1, 20);
+		let dat_velocity = dat_gui.add(this.default_sim_props, "velocity", 0.1, 20, 0.01);
 		dat_velocity.onChange(function(v) {
 			for(let e of this.scene) {
 				if(e instanceof Ball) {
@@ -650,6 +674,7 @@ class Sim {
 				}
 			}
 			this.render_needed = true;
+			save_props();
 		}.bind(this));
 		let dat_wall = dat_gui.add(this.default_sim_props, "wall_openings", 0, 40);
 		dat_wall.onChange(function(v) {
@@ -660,15 +685,27 @@ class Sim {
 				}
 			}
 			this.render_needed = true;
+			save_props();
 		}.bind(this));
 		let dat_transmission = dat_gui.add(this.default_sim_props, "transmission_rate", 0, 1, 0.01);
-		//dat_transmission.onChange(function(v) {}.bind(this));
+		dat_transmission.onChange(function(v) {
+			save_props();
+		}.bind(this));
+		let dat_recovery = dat_gui.add(this.default_sim_props, "infection_duration", 0, 20, 0.1);
+		dat_recovery.onChange(function(v) {
+			//this.default_sim_props.infection_duration
+			this.recovery_time = v * 1000;
+			save_props();
+		}.bind(this));
+		dat_gui.add(this.default_sim_props, "reset_to_default");
 		// this is hacky and bad
 		this.update_dat = function() {
 			dat_radius.updateDisplay();
 			dat_velocity.updateDisplay();
 			dat_wall.updateDisplay();
 			dat_transmission.updateDisplay();
+			dat_recovery.updateDisplay();
+			save_props();
 		}.bind(this);
 
 		// initialize everything else
@@ -1048,7 +1085,8 @@ class Sim {
 			radius: this.default_sim_props.radius,
 			velocity: this.default_sim_props.velocity,
 			wall_openings: this.default_sim_props.wall_openings,
-			transmission_rate: this.default_sim_props.transmission_rate
+			transmission_rate: this.default_sim_props.transmission_rate,
+			infection_duration: this.default_sim_props.infection_duration
 		}
 		copy.scene = [];
 		for(let obj of this.scene) {
@@ -1104,6 +1142,7 @@ class Sim {
 				this.default_sim_props.velocity = data.default_sim_props.velocity;
 				this.default_sim_props.wall_openings = data.default_sim_props.wall_openings;
 				this.default_sim_props.transmission_rate = data.default_sim_props.transmission_rate;
+				this.default_sim_props.infection_duration = data.default_sim_props.infection_duration;
 				this.update_dat();
 				this.scene = [];
 				for(let obj of data.scene) {
