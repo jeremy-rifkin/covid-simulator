@@ -1193,5 +1193,7 @@ class Sim {
 		this.render_needed = true;
 		this.infection_count.innerHTML = "";
 		this.r0_display.innerHTML = "";
+		for(let b of this.borders)
+			this.scene.push(b);
 	}
 }
