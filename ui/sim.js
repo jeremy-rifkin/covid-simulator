@@ -727,7 +727,7 @@ class Sim {
 		this.n_balls = 0;
 		this.n_collisions = 0;
 		this.scene = [];
-		this.spread = []; // [delta_tick, infected, vulnerable, recovered]
+		this.spread = []; // [delta_tick, infected, vulnerable, recovered, r0, re]
 
 		this.borders = [
 			new Line(this, [0, 0], [0, 0], false),
@@ -820,80 +820,74 @@ class Sim {
 			this.graph_ctx.lineTo(x, h - this.spread[this.spread.length - 1][p] / this.n_balls * ph);
 			this.graph_ctx.stroke();
 		}
+
 		// R_E graph
 		dx = (this.re_graph.width - 100) / this.current_tick;
 		x = 0;
 		h = this.re_graph.height - 100;
 		ph = h - 10;
 		this.re_graph_ctx.lineWidth = 2;
-		/*let r0 = this.get_r0(),
-			m_length = 20,
-			moving_buffer = [],
-			m_av = () => {
-				let s = 0;
-				for(let e of moving_buffer)
-					s += e;
-				return s / moving_buffer.length;
-			};
-		this.re_graph_ctx.beginPath();
-		this.re_graph_ctx.moveTo(x, h - this.spread[0][2] / this.n_balls * ph);
-		moving_buffer.push(this.spread[0][2]);
-		x += dx;
+		//let max_r = this.spread[this.spread.length - 1][4]; // TODO: r0-re consistency
+		let max_r = this.spread[0][5];
 		for(let i = 1; i < this.spread.length; i++) {
-			moving_buffer.push(this.spread[i][2]);
-			if(moving_buffer.length > m_length)
-				moving_buffer.shift();
-			//console.log(moving_buffer);
-			//this.re_graph_ctx.lineTo(x, h - this.spread[i][2] / this.n_balls * ph);
-			this.re_graph_ctx.lineTo(x, h - m_av() / this.n_balls * ph);
-			x += dx * this.spread[i][0];
-		}*/
-		let r0 = this.get_r0();
-		// TODO: r0-re consistency
-		let max_vuln = this.n_balls; //this.spread[0][2];
-		//for(let i = 1; i < this.spread.length; i++) {
-		//	if(this.spread[i][2] > max_vuln){
-		//		max_vuln = this.spread[i][2];
-		//	}
-		//}
+			if(this.spread[i][5] > max_r)
+				max_r = this.spread[i][5];
+		}
 		this.re_graph_ctx.font = "14px Arial";
 		this.re_graph_ctx.textBaseline = "middle";
 		this.re_graph_ctx.textAlign = "center";
 		this.re_graph_ctx.fillStyle = "#dcdcdc";
 		this.re_graph_ctx.strokeStyle = "#dcdcdc";
-		let lines = [1, .5, .25, 0];
+		let lines = [max_r, .5 * max_r, 2.4, 1];
 		for(let p of lines) {
 			this.re_graph_ctx.beginPath();
-			this.re_graph_ctx.moveTo(0, h - p * max_vuln / this.n_balls * ph);
-			this.re_graph_ctx.lineTo(this.re_graph.width - 100, h - p * max_vuln / this.n_balls * ph);
+			this.re_graph_ctx.moveTo(0, h - p / max_r * ph);
+			this.re_graph_ctx.lineTo(this.re_graph.width - 100, h - p / max_r * ph);
 			this.re_graph_ctx.stroke();
 
-			let textbox = this.re_graph_ctx.measureText((r0 * p * max_vuln / this.n_balls).toFixed(1));
-			//this.re_graph_ctx.fillStyle = "#fff";
-			//this.re_graph_ctx.fillRect((this.re_graph.width - 100) / 2 - textbox.width / 2 - 3, h - p * max_vuln / this.n_balls * ph - 2, textbox.width + 6, 4);
-			this.re_graph_ctx.clearRect((this.re_graph.width - 100) / 2 - textbox.width / 2 - 3, h - p * max_vuln / this.n_balls * ph - 2, textbox.width + 6, 4);
-			//this.re_graph_ctx.fillStyle = "#dcdcdc";
-			this.re_graph_ctx.fillText((r0 * p * max_vuln / this.n_balls).toFixed(1), (this.re_graph.width - 100) / 2, h - p * max_vuln / this.n_balls * ph);
+			let textbox = this.re_graph_ctx.measureText(p.toFixed(1));
+			this.re_graph_ctx.clearRect((this.re_graph.width - 100) / 2 - textbox.width / 2 - 3, h - p / max_r * ph - 2, textbox.width + 6, 4);
+			this.re_graph_ctx.fillText(p.toFixed(1), (this.re_graph.width - 100) / 2, h - p / max_r * ph);
 		}
 
 		this.re_graph_ctx.strokeStyle = "#000";
 		this.re_graph_ctx.beginPath();
-		this.re_graph_ctx.moveTo(x, h - this.spread[0][2] / this.n_balls * ph);
+		this.re_graph_ctx.moveTo(x, h - this.spread[0][5] / max_r * ph);
 		x += dx;
 		for(let i = 1; i < this.spread.length; i++) {
-			this.re_graph_ctx.lineTo(x, h - this.spread[i][2] / this.n_balls * ph);
+			this.re_graph_ctx.lineTo(x, h - this.spread[i][5] / max_r * ph);
 			x += dx * this.spread[i][0];
 		}
-		this.re_graph_ctx.lineTo(x, h - this.spread[this.spread.length - 1][2] / this.n_balls * ph);
+		this.re_graph_ctx.lineTo(x, h - this.spread[this.spread.length - 1][5] / max_r * ph);
 		this.re_graph_ctx.textAlign = "left";
 		this.re_graph_ctx.fillStyle = "#3c3c3c";
-		this.re_graph_ctx.fillText("R effective", x + 5, h - this.spread[this.spread.length - 1][2] / this.n_balls * ph);
+		//this.re_graph_ctx.fillText("R effective", x + 5, h - this.spread[this.spread.length - 1][5] / max_r * ph);
+		this.re_graph_ctx.fillText(`R effective = ${this.spread[this.spread.length - 1][5].toFixed(1)}`, x + 5, h - this.spread[this.spread.length - 1][5] / max_r * ph);
 		this.re_graph_ctx.stroke();
 	}
 	get_r0() {
-		let transmission_time = this.recovery_time / 1000,
-			collisions_per_balls_per_second = 2 * this.n_collisions / this.n_balls / ((this.current_tick - 60) / 60); // -60 to compensate for earlier hack
-		return transmission_time * collisions_per_balls_per_second;
+		let infection_duration_time = this.recovery_time / 1000,
+			//collisions_per_balls_per_second = 2 * this.n_collisions / this.n_balls / ((this.current_tick - 60) / 60);
+			collisions_per_balls_per_second = this.n_collisions / this.n_balls / ((this.current_tick - 60) / 60); // -60 to compensate for earlier hack
+		return this.default_sim_props.transmission_rate * infection_duration_time * collisions_per_balls_per_second;
+	}
+	get_re() {
+		let tick_total = 0,
+			i,
+			target_dx = 120;
+		//if(this.current_tick <= target_dx)
+		//	return 0;
+		for(i = this.spread.length - 1; i >= 0; i--) {
+			tick_total += this.spread[i][0];
+			if(tick_total >= target_dx)
+				break;
+		}
+		if(tick_total < target_dx)
+			return 0; //this.get_r0();
+		let dy = (this.spread[this.spread.length - 1][1] + this.spread[this.spread.length - 1][3])
+					- (this.spread[i][1] + this.spread[i][3]);
+		let spread_per_sec = 60 * (dy / tick_total);
+		return spread_per_sec / this.spread[this.spread.length - 1][1] * this.recovery_time / 1000;
 	}
 	update() {
 		this.current_tick++;
@@ -929,7 +923,7 @@ class Sim {
 		  && recovered == this.spread[this.spread.length - 1][3])
 			this.spread[this.spread.length - 1][0]++;
 		else {
-			this.spread.push([1, infected, vulnerable, recovered]);
+			this.spread.push([1, infected, vulnerable, recovered, this.get_r0(), this.get_re()]);
 			this.infection_count.innerHTML = `<span style="color: ${grey}">${vulnerable}</span> + <span style="color: ${red}">${infected}</span> + <span style="color: ${blue}">${recovered}</span> = ${vulnerable + infected + recovered}`;
 		}
 		// TODO: start cutting off this.spread once it gets really long?
