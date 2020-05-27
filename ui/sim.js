@@ -937,7 +937,7 @@ class Sim {
 
 		if(this.current_tick % 10 == 0 && this.current_tick > 60 && this.n_balls > 0) {
 			//this.r0_display.innerHTML = `Simulation R0 = ${Math.round(this.get_r0() * 10) / 10}`;
-			this.r0_display.innerHTML = `Simulation R0 = ${this.get_r0().toFixed(1)}`;
+			this.r0_display.innerHTML = `Inherent R0 = ${this.get_r0().toFixed(1)}`;
 		}
 		
 		if(!this.force_run && infected == 0 && this.spread.length > 0 && this.spread[this.spread.length - 1][0] * this.dt * 1000 >= this.delay) {
