@@ -4,20 +4,45 @@ let red = "#e56a59",
 	blue = "#7dcef1";
 
 let states = {
-	vulnerable: 0,
-	infected: 1,
-	recovered: 2
+	/* The state of the ball with respect to the virus */
+	vulnerable: "#c6c6c6", // never infected; grey
+	infected: "#e56a59",//"#e8e388", // infected but not yet showing symptoms; yellow
+	symptomatic: "#e56a59", // infected and showing symptoms; red
+	recovered: "#7dcef1" // no longer able to be infected; blue
 };
 
 class Ball {
+	/* A Ball represents a person in this simulation.
+
+	Ball tracks its own velocity, its own infection state, and how many other Balls it has infected.
+	*/
 	constructor(parent) {
+		/* Construct a new Ball instance with its parent Sim-specified default radius
+		and its mass as a default 10,
+		placing it randomly in the parent Sim instance screen with a random direction
+		and the default velocity given by its parent Sim.
+
+		non-field parameters:
+			None
+
+		fields:
+			parent (Sim) : parent Sim passed in
+			r (<type>) : radius
+			m (<type>) : mass
+			vs (float) : x velocity
+			vy (float) : y velocity
+			selected (boolean) : True if this ball is selected in the simulation by the user (only during setup?)
+			state (states enum) : virus state of the ball
+			infected_time (time) : time at which the state became infected
+			reproduction_count (int) : the number of Balls this Ball has infected
+		*/
 		this.parent = parent; // ref to parent sim instance
 		this.r = this.parent.default_sim_props.radius;
 		this.m = 10;
 		do {
-			this.x = -this.parent.screen_w/2 + this.r + Math.random() * (this.parent.screen_w - 2 * this.r);
-			this.y = -this.parent.screen_h/2 + this.r + Math.random() * (this.parent.screen_h - 2 * this.r);
-		} while(!this.parent.is_good_spawn(this.x, this.y));
+			this.x = (-this.parent.screen_w / 2 + this.r) + Math.random() * (this.parent.screen_w - (2 * this.r));
+			this.y = (-this.parent.screen_h / 2 + this.r) + Math.random() * (this.parent.screen_h - (2 * this.r));
+		} while (!this.parent.is_good_spawn(this.x, this.y));
 
 		let theta = Math.random() * 2 * Math.PI;
 		this.vx = this.parent.default_sim_props.velocity * Math.cos(theta);
@@ -28,29 +53,52 @@ class Ball {
 		this.reproduction_count = 0;
 	}
 	update() {
+		/* Update the location of the Ball by velocity and virus state of the Ball
+
+		If this ball has been infected for more than parent.recovery_time, make it "recovered".
+		*/
 		//console.log(this);
 		this.x += this.vx * this.parent.dt;
 		this.y += this.vy * this.parent.dt;
 		// check our infection time
-		if(this.state == states.infected && (this.parent.current_tick - this.infected_time) * this.parent.dt * 1000 >= this.parent.recovery_time) {
+		if (this.state == states.infected && (this.parent.current_tick - this.infected_time) * this.parent.dt * 1000 >= this.parent.recovery_time) { // MAL TODO what's the parent.dt * 1000?
 			this.state = states.recovered;
 			//this.infected_time = null;
 		}
 	}
 	rotate(v, theta) {
+		/* Taking in a velocity vector, rotate by theta.
+		*/
+		// MAL TODO move to utils
 		return [
 			v[0] * Math.cos(theta) - v[1] * Math.sin(theta),
 			v[0] * Math.sin(theta) + v[1] * Math.cos(theta)
 		];
 	}
+	updateBallInfectionStatesOnCollision(b1) {
+		/* update the infection state of b1 based on a collision with this */
+		if (this.state == states.infected && b1.state == states.vulnerable) {
+			// infect b1 if this is infected
+			if (Math.random() <= this.parent.default_sim_props.transmission_rate) {
+				b1.state = states.infected;
+				b1.infected_time = this.parent.current_tick;
+				this.reproduction_count++;
+			}
+		}
+	}
 	updateAgainst(obj) {
-		if(obj instanceof Ball) {
+		/* Update the Ball based on a collision with obj
+
+		If obj is an infected Ball,
+		infect this probabilistically based on parent Sim's default transmission rate.
+		*/
+		if (obj instanceof Ball) {
 			// go ahead and handle ball v. ball collision here
 			// appeals can be sent to the supreme court
 			let dx = obj.x - this.x,
 				dy = obj.y - this.y;
 			// check collision
-			if(dx*dx + dy*dy <= (obj.r + this.r) * (obj.r + this.r)) {
+			if (dx * dx + dy * dy <= (obj.r + this.r) * (obj.r + this.r)) {
 				// do elastic
 				let dvx = this.vx - obj.vx,
 					dvy = this.vy - obj.vy;
@@ -78,54 +126,30 @@ class Ball {
 				}
 				// technically a collision for both particles, but we will only increment
 				// n_collisions once and it will be multiplied by two later
-				if(this.parent.current_tick >= 60) // TODO: hacky...
+				if (this.parent.current_tick >= 60) // TODO: hacky...
 					this.parent.n_collisions++;
 
 				// do infection
-				if(this.state == states.vulnerable && obj.state == states.infected) {
-					// do infection chance
-					if(Math.random() <= this.parent.default_sim_props.transmission_rate) {
-						this.state = states.infected;
-						this.infected_time = this.parent.current_tick;
-						obj.reproduction_count++;
-					}
-				}
-				// both ways
-				if(obj.state == states.vulnerable && this.state == states.infected) {
-					// do infection chance
-					if(Math.random() <= this.parent.default_sim_props.transmission_rate) {
-						obj.state = states.infected;
-						obj.infected_time = this.parent.current_tick;
-						this.reproduction_count++;
-					}
-				}
+				this.updateBallInfectionStatesOnCollision(obj);
+				obj.updateBallInfectionStatesOnCollision(this);
 			}
-		} else if(obj instanceof Line) {
+		} else if (obj instanceof Line) {
 			// we're actually going to pass the collision off to Line.updateAgainst
 			obj.updateAgainst(this);
-		} else if(obj instanceof Wall) {
+		} else if (obj instanceof Wall) {
 			// again, pass off to the wall update method
 			obj.updateAgainst(this);
+		} else {
+			throw "Ball ran into an unexpected object"
 		}
 	}
 	draw() {
-		switch(this.state) {
-			case states.vulnerable:
-				this.parent.ctx.fillStyle = grey;
-				break;
-			case states.infected:
-				this.parent.ctx.fillStyle = red;
-				break;
-			case states.recovered:
-				this.parent.ctx.fillStyle = blue;
-				break;
-			default:
-				throw "oops";
-		}
+		/* Draw this Ball, altering the stroke if this Ball is selected. */
+		this.parent.ctx.fillStyle = this.state
 		this.parent.ctx.beginPath();
 		this.parent.ctx.arc(...this.parent.coord_to_screen(this.x, this.y), this.r * this.parent.px_per_unit, 0, 2 * Math.PI);
 		this.parent.ctx.fill();
-		if(this.selected) {
+		if (this.selected) {
 			this.parent.ctx.strokeStyle = "#000";
 			this.parent.ctx.lineWidth = 1;
 			this.parent.ctx.stroke();
@@ -134,7 +158,17 @@ class Ball {
 }
 
 class Line {
-	constructor(parent, p1, p2, render_line=true) {
+	constructor(parent, p1, p2, render_line = true) {
+		/* Construct a line object.
+
+		Non-field parameters: None
+
+		Fields:
+			parent (Sim) : parent Sim, passed in
+			p1 (Point) : starting point of line, passed in
+			p2 (Point) : ending point of line, passed in
+			render_line (boolean) : ?
+		*/
 		this.parent = parent; // ref to parent sim instance
 		this.p1 = p1;
 		this.p2 = p2;
@@ -144,16 +178,16 @@ class Line {
 		this.p1 = p1;
 		this.p2 = p2;
 	}
-	update() {}
+	update() { }
 	reflect(obj, x, y) { // reflect across a normal
 		// pt on line
 		let bx = obj.x,
 			by = obj.y;
 		// check dot product real quick
-		if((bx - x) * obj.vx + (by - y) * obj.vy <= 0) {
+		if ((bx - x) * obj.vx + (by - y) * obj.vy <= 0) {
 			// reflect velocity vector
 			let n = [obj.x - x, obj.y - y],
-				n_mag = Math.sqrt(n[0]*n[0] + n[1]*n[1]),
+				n_mag = Math.sqrt(n[0] * n[0] + n[1] * n[1]),
 				v = [obj.vx, obj.vy],
 				v2n = 2 * v[0] * n[0] + 2 * v[1] * n[1];
 			obj.vx = v[0] - v2n / (n_mag * n_mag) * n[0];
@@ -165,7 +199,7 @@ class Line {
 			by = obj.y;
 		// optimizing delta_x^2 + delta_y^2 with constraint ax + by + c = 0
 		let a, b, c;
-		if(this.p1[0] - this.p2[0] == 0) {
+		if (this.p1[0] - this.p2[0] == 0) {
 			// vertical edge case
 			a = 1;
 			b = 0;
@@ -181,9 +215,9 @@ class Line {
 		let x = -(a * b * by - b * b * bx + a * c) / (a * a + b * b),
 			y = -(a * b * bx - a * a * by + b * c) / (a * a + b * b);
 		// check for collision with line and check that the collision is within the line segment
-		if(between(x, this.p1[0], this.p2[0])
-		  && between(y, this.p1[1], this.p2[1])
-		  && (bx - x) * (bx - x) + (by - y) * (by - y) <= obj.r * obj.r) {
+		if (between(x, this.p1[0], this.p2[0])
+			&& between(y, this.p1[1], this.p2[1])
+			&& (bx - x) * (bx - x) + (by - y) * (by - y) <= obj.r * obj.r) {
 			// collision has occurred
 			// dot product will be checked in .reflect()
 			this.reflect(obj, x, y);
@@ -196,26 +230,29 @@ class Line {
 		let bx = obj.x,
 			by = obj.y;
 		// p1
-		if((bx - this.p1[0]) * (bx - this.p1[0]) + (by - this.p1[1]) * (by - this.p1[1]) <= obj.r * obj.r
-		  && (bx - this.p1[0]) * obj.vx + (by - this.p1[1]) * obj.vy <= 0) {
+		if ((bx - this.p1[0]) * (bx - this.p1[0]) + (by - this.p1[1]) * (by - this.p1[1]) <= obj.r * obj.r
+			&& (bx - this.p1[0]) * obj.vx + (by - this.p1[1]) * obj.vy <= 0) {
 			this.reflect(obj, this.p1[0], this.p1[1]);
 		}
 		// p2
-		if((bx - this.p2[0]) * (bx - this.p2[0]) + (by - this.p2[1]) * (by - this.p2[1]) <= obj.r * obj.r
-		  && (bx - this.p2[0]) * obj.vx + (by - this.p2[1]) * obj.vy <= 0) {
+		if ((bx - this.p2[0]) * (bx - this.p2[0]) + (by - this.p2[1]) * (by - this.p2[1]) <= obj.r * obj.r
+			&& (bx - this.p2[0]) * obj.vx + (by - this.p2[1]) * obj.vy <= 0) {
 			this.reflect(obj, this.p2[0], this.p2[1]);
 		}
 	}
 	updateAgainst(obj) {
-		if(obj instanceof Ball) {
-			if(!this._line_collision(obj))
+		/* If obj is a Ball, update the Ball based on a side-on or endpoint collision with this line.
+		*/
+		if (obj instanceof Ball) {
+			if (!this._line_collision(obj))
 				this._endpoint_collision(obj);
 		} else {
-			// TODO?
+			//TODO MAL why?
+			//throw "Unexpected collision by non-Ball object"
 		}
 	}
 	draw() {
-		if(this.render_line) {
+		if (this.render_line) {
 			this.parent.ctx.strokeStyle = "#000";
 			this.parent.ctx.lineWidth = 2;
 			this.parent.ctx.beginPath();
@@ -228,37 +265,50 @@ class Line {
 
 class Wall {
 	constructor(parent, x, y) {
+		/* Construct a Wall object with a width 4 and a default height of the entire screen.
+
+		Non-field paramaters: None
+
+		Fields :
+			parent (Sim) : the parent Sim instance, passed in
+
+		*/
 		this.parent = parent; // ref to parent sim instance
 		let w = 4,
 			h = this.parent.screen_h;
 		this.x = x;
 		this.y = y;
 		this.h = h;
-		this.left = x - w/2;
-		this.right = x + w/2;
-		this.top = y + h/2;
-		this.bottom = y - h/2;
+		this.left = x - w / 2;
+		this.right = x + w / 2;
+		this.top = y + h / 2;
+		this.bottom = y - h / 2;
 		this.opening = 0;
 		this.edges = [
-			new Line(this.parent, [this.left,  this.bottom        ], [this.left,  this.bottom + h / 2]),
-			new Line(this.parent, [this.left,  this.bottom + h / 2], [this.right, this.bottom + h / 2]),
-			new Line(this.parent, [this.right, this.bottom        ], [this.right, this.bottom + h / 2]),
+			new Line(this.parent, [this.left, this.bottom], [this.left, this.bottom + h / 2]),
+			new Line(this.parent, [this.left, this.bottom + h / 2], [this.right, this.bottom + h / 2]),
+			new Line(this.parent, [this.right, this.bottom], [this.right, this.bottom + h / 2]),
 
-			new Line(this.parent, [this.left,  this.top        ], [this.left,  this.top - h / 2]),
-			new Line(this.parent, [this.left,  this.top - h / 2], [this.right, this.top - h / 2]),
-			new Line(this.parent, [this.right, this.top        ], [this.right, this.top - h / 2])
+			new Line(this.parent, [this.left, this.top], [this.left, this.top - h / 2]),
+			new Line(this.parent, [this.left, this.top - h / 2], [this.right, this.top - h / 2]),
+			new Line(this.parent, [this.right, this.top], [this.right, this.top - h / 2])
 		];
 		this.selected = false;
 		this.resolve_balls();
 	}
 	resolve_balls() {
-		for(let e of this.parent.scene) {
-			if(e instanceof Ball) {
-				if(between(e.x, this.left, this.right)) {
-					if(between(e.y, this.top, this.top - this.h / 2 + this.opening)
-					|| between(e.y, this.bottom, this.bottom + this.h / 2 - this.opening)) {
+		/* Check to see if any ball in the scene has collided with this wall.
+		*/
+		// MAL TODO: This is n^2, and memory doesn't seem like it should be an issue.
+		// What about updating the collision parts of lines and boards to be in a LUT?
+		// Then balls could register themselves in the LUT and collision-detection should be easy....
+		for (let e of this.parent.scene) {
+			if (e instanceof Ball) {
+				if (between(e.x, this.left, this.right)) {
+					if (between(e.y, this.top, this.top - this.h / 2 + this.opening)
+						|| between(e.y, this.bottom, this.bottom + this.h / 2 - this.opening)) {
 						let epsilon = 0.01;
-						if(e.x < this.x) {
+						if (e.x < this.x) {
 							e.x = this.left - epsilon;
 						} else {
 							e.x = this.right + epsilon;
@@ -282,26 +332,26 @@ class Wall {
 		this.resolve_balls();
 	}
 	update() {
-		
+
 	}
 	updateAgainst(obj) {
-		if(obj instanceof Ball) {
+		if (obj instanceof Ball) {
 			let did_collide = 0;
-			for(let e of this.edges)
+			for (let e of this.edges)
 				did_collide |= e._line_collision(obj);
-			if(!did_collide)
-				for(let e of this.edges)
+			if (!did_collide)
+				for (let e of this.edges)
 					e._endpoint_collision(obj);
 		} else {
 			// TODO?
 		}
 	}
 	draw() {
-		if(this.selected) {
+		if (this.selected) {
 			this.parent.ctx.fillStyle = "rgba(205, 205, 205, .4)";
 			this.parent.ctx.fillRect(...this.parent.coord_to_screen(this.left, this.top), (this.right - this.left) * this.parent.px_per_unit, (this.top - this.bottom) * this.parent.px_per_unit);
 		}
-		for(let e of this.edges)
+		for (let e of this.edges)
 			e.draw();
 	}
 }
@@ -351,10 +401,10 @@ class DrawWallsHandler {
 		let x = this.x,
 			w = this.width,
 			h = this.parent.screen_h;
-		let left = x - w/2,
-			right = x + w/2,
-			top = h/2,
-			bottom = -h/2;
+		let left = x - w / 2,
+			right = x + w / 2,
+			top = h / 2,
+			bottom = -h / 2;
 		this.parent.ctx.strokeStyle = "#000";
 		this.parent.ctx.lineWidth = 2;
 		this.parent.ctx.beginPath();
@@ -380,13 +430,13 @@ class DrawLinesHandler {
 		this.parent.canvas.addEventListener("click", this.clickhandler, false);
 		this.rightclickhandler = this.rightclick.bind(this);
 		this.parent.canvas.addEventListener("contextmenu", this.rightclickhandler, false);
-		
+
 		this.parent.drawlines.setAttribute("data-selected", "");
 	}
 	click(e) {
 		let rect = this.parent.canvas.getBoundingClientRect(),
 			xy = this.parent.screen_to_coord(e.clientX - rect.left, e.clientY - rect.top);
-		if(this.p1 == null) {
+		if (this.p1 == null) {
 			this.p1 = xy;
 		} else {
 			this.parent.scene.push(new Line(this.parent, this.p1, xy));
@@ -416,7 +466,7 @@ class DrawLinesHandler {
 		this.parent.render_needed = true;
 	}
 	draw() {
-		if(this.p1 != null && this.last_xy != null) {
+		if (this.p1 != null && this.last_xy != null) {
 			this.parent.ctx.strokeStyle = "#000";
 			this.parent.ctx.lineWidth = 2;
 			this.parent.ctx.beginPath();
@@ -439,7 +489,7 @@ class PointerHandler {
 		this.parent.canvas.addEventListener("click", this.clickhandler, false);
 		this.wheelhandler = this.wheel.bind(this);
 		this.parent.canvas.addEventListener("wheel", this.wheelhandler, false);
-		
+
 		this.parent.pointer.setAttribute("data-selected", "");
 	}
 	analyzePoint(e) {
@@ -448,15 +498,15 @@ class PointerHandler {
 			x = xy[0],
 			y = xy[1],
 			scene = this.parent.scene;
-		for(let i = scene.length - 1; i >= 0; i--) {
-			if(scene[i] instanceof Ball) {
-				if((x - scene[i].x) * (x - scene[i].x) + (y - scene[i].y) * (y - scene[i].y) <= scene[i].r * scene[i].r) {
+		for (let i = scene.length - 1; i >= 0; i--) {
+			if (scene[i] instanceof Ball) {
+				if ((x - scene[i].x) * (x - scene[i].x) + (y - scene[i].y) * (y - scene[i].y) <= scene[i].r * scene[i].r) {
 					return scene[i];
 				}
-			} else if(scene[i] instanceof Line) {
+			} else if (scene[i] instanceof Line) {
 				// TODO
-			} else if(scene[i] instanceof Wall) {
-				if(between(x, scene[i].left, scene[i].right) && between(y, scene[i].top, scene[i].bottom)) {
+			} else if (scene[i] instanceof Wall) {
+				if (between(x, scene[i].left, scene[i].right) && between(y, scene[i].top, scene[i].bottom)) {
 					return scene[i];
 				}
 			}
@@ -465,25 +515,25 @@ class PointerHandler {
 	}
 	click(e) {
 		let obj = this.analyzePoint(e);
-		if(obj != null) {
-			if(obj instanceof Ball) {
+		if (obj != null) {
+			if (obj instanceof Ball) {
 				obj.state = states.infected;
 				obj.infected_time = this.parent.current_tick;
-			} else if(obj instanceof Line) {
+			} else if (obj instanceof Line) {
 
-			} else if(obj instanceof Wall) {
-				
+			} else if (obj instanceof Wall) {
+
 			}
 			this.parent.render_needed = true;
 		}
 	}
 	mousemove(e) {
 		let obj = this.analyzePoint(e);
-		if(this.current_selected != null) {
+		if (this.current_selected != null) {
 			this.current_selected.selected = false;
 		}
 		this.current_selected = obj;
-		if(this.current_selected != null) {
+		if (this.current_selected != null) {
 			this.current_selected.selected = true;
 		}
 		this.parent.render_needed = true;
@@ -491,10 +541,10 @@ class PointerHandler {
 	wheel(e) {
 		//console.log(e);
 		let obj = this.analyzePoint(e);
-		if(obj != null && obj instanceof Wall) {
+		if (obj != null && obj instanceof Wall) {
 			e.preventDefault();
 			obj.opening += e.deltaY / 2;
-			if(obj.opening < 0)
+			if (obj.opening < 0)
 				obj.opening = 0;
 			obj.update_opening();
 			this.parent.render_needed = true;
@@ -508,12 +558,12 @@ class PointerHandler {
 		this.parent.canvas.removeEventListener("mousemove", this.mousemovehandler, false);
 		this.parent.canvas.removeEventListener("click", this.clickhandler, false);
 		this.parent.canvas.removeEventListener("wheel", this.wheelhandler, false);
-		if(this.current_selected != null) {
+		if (this.current_selected != null) {
 			this.current_selected.selected = false;
 		}
 	}
 	draw() {
-		
+
 	}
 }
 
@@ -569,8 +619,8 @@ class Sim {
 
 		this.pointer = document.createElement("div");
 		this.pointer.innerHTML = `<i class="fas fa-mouse-pointer"></i>`;
-		this.pointer.addEventListener("click", function() {
-			if(this.current_ui_action instanceof PointerHandler) {
+		this.pointer.addEventListener("click", function () {
+			if (this.current_ui_action instanceof PointerHandler) {
 				this.cancel_action();
 			} else {
 				this.cancel_action();
@@ -581,8 +631,8 @@ class Sim {
 
 		this.drawlines = document.createElement("div");
 		this.drawlines.innerHTML = `<i class="fas fa-pencil-ruler"></i>`;
-		this.drawlines.addEventListener("click", function() {
-			if(this.current_ui_action instanceof DrawLinesHandler) {
+		this.drawlines.addEventListener("click", function () {
+			if (this.current_ui_action instanceof DrawLinesHandler) {
 				this.cancel_action();
 			} else {
 				this.cancel_action();
@@ -593,8 +643,8 @@ class Sim {
 
 		this.drawwalls = document.createElement("div");
 		this.drawwalls.innerHTML = `<i class="fas fa-border-none"></i>`;
-		this.drawwalls.addEventListener("click", function() {
-			if(this.current_ui_action instanceof DrawWallsHandler) {
+		this.drawwalls.addEventListener("click", function () {
+			if (this.current_ui_action instanceof DrawWallsHandler) {
 				this.cancel_action();
 			} else {
 				this.cancel_action();
@@ -605,14 +655,14 @@ class Sim {
 
 		this.download = document.createElement("div");
 		this.download.innerHTML = `<i class="fas fa-download"></i>`;
-		this.download.addEventListener("click", function() {
+		this.download.addEventListener("click", function () {
 			this.download_sim();
 		}.bind(this), false);
 		this.controls.appendChild(this.download);
 
 		this.upload = document.createElement("div");
 		this.upload.innerHTML = `<i class="fas fa-upload"></i>`;
-		this.upload.addEventListener("click", function() {
+		this.upload.addEventListener("click", function () {
 			this.upload_sim();
 		}.bind(this), false);
 		this.controls.appendChild(this.upload);
@@ -621,14 +671,14 @@ class Sim {
 		this.reset.innerHTML = `<i class="fas fa-undo"></i>`;
 		this.reset.addEventListener("click", this.reset_sim.bind(this), false);
 		this.controls.appendChild(this.reset);
-		
+
 		function sim_props_class(pr) {
 			this.radius = 2;
 			this.velocity = 7;
 			this.wall_openings = 0;
 			this.transmission_rate = 1;
 			this.infection_duration = 20; // TODO
-			this.reset_to_default = function() {
+			this.reset_to_default = function () {
 				this.radius = 2;
 				this.velocity = 7;
 				this.wall_openings = 0;
@@ -640,24 +690,24 @@ class Sim {
 		this.default_sim_props = new sim_props_class(this);
 
 		// check for saved props
-		if(localStorage.getItem("default_sim_props") != null) {
+		if (localStorage.getItem("default_sim_props") != null) {
 			try {
 				let props = JSON.parse(localStorage.getItem("default_sim_props"));
-				for(let prop in props) {
+				for (let prop in props) {
 					this.default_sim_props[prop] = props[prop];
 				}
-			} catch {}
+			} catch { }
 		}
-		let save_props = function() {
+		let save_props = function () {
 			localStorage.setItem("default_sim_props", JSON.stringify(this.default_sim_props));
 		}.bind(this);
 
-		var dat_gui = new dat.GUI({autoPlace: false});
+		var dat_gui = new dat.GUI({ autoPlace: false });
 		this.container.appendChild(dat_gui.domElement);
 		let dat_radius = dat_gui.add(this.default_sim_props, "radius", 0.1, 5);
-		dat_radius.onChange(function(v) {
-			for(let e of this.scene) {
-				if(e instanceof Ball) {
+		dat_radius.onChange(function (v) {
+			for (let e of this.scene) {
+				if (e instanceof Ball) {
 					e.r = v;
 				}
 			}
@@ -665,9 +715,9 @@ class Sim {
 			save_props();
 		}.bind(this));
 		let dat_velocity = dat_gui.add(this.default_sim_props, "velocity", 0.1, 20, 0.01);
-		dat_velocity.onChange(function(v) {
-			for(let e of this.scene) {
-				if(e instanceof Ball) {
+		dat_velocity.onChange(function (v) {
+			for (let e of this.scene) {
+				if (e instanceof Ball) {
 					let m = Math.sqrt(e.vx * e.vx + e.vy * e.vy);
 					e.vx *= v / m;
 					e.vy *= v / m;
@@ -677,9 +727,9 @@ class Sim {
 			save_props();
 		}.bind(this));
 		let dat_wall = dat_gui.add(this.default_sim_props, "wall_openings", 0, 40);
-		dat_wall.onChange(function(v) {
-			for(let e of this.scene) {
-				if(e instanceof Wall) {
+		dat_wall.onChange(function (v) {
+			for (let e of this.scene) {
+				if (e instanceof Wall) {
 					e.opening = v;
 					e.update_opening();
 				}
@@ -688,18 +738,18 @@ class Sim {
 			save_props();
 		}.bind(this));
 		let dat_transmission = dat_gui.add(this.default_sim_props, "transmission_rate", 0, 1, 0.01);
-		dat_transmission.onChange(function(v) {
+		dat_transmission.onChange(function (v) {
 			save_props();
 		}.bind(this));
 		let dat_recovery = dat_gui.add(this.default_sim_props, "infection_duration", 0, 20, 0.1);
-		dat_recovery.onChange(function(v) {
+		dat_recovery.onChange(function (v) {
 			//this.default_sim_props.infection_duration
 			this.recovery_time = v * 1000;
 			save_props();
 		}.bind(this));
 		dat_gui.add(this.default_sim_props, "reset_to_default");
 		// this is hacky and bad
-		this.update_dat = function() {
+		this.update_dat = function () {
 			dat_radius.updateDisplay();
 			dat_velocity.updateDisplay();
 			dat_wall.updateDisplay();
@@ -735,7 +785,7 @@ class Sim {
 			new Line(this, [0, 0], [0, 0], false),
 			new Line(this, [0, 0], [0, 0], false)
 		];
-		for(let b of this.borders)
+		for (let b of this.borders)
 			this.scene.push(b);
 
 		window.addEventListener("resize", this.resize.bind(this), false);
@@ -751,25 +801,26 @@ class Sim {
 		this.container.style.height = this.screen_px_h + "px";
 
 		// redo borders
-		this.borders[0].set([-this.screen_w/2, -this.screen_h/2], [-this.screen_w/2,  this.screen_h/2]); // l
-		this.borders[1].set([ this.screen_w/2, -this.screen_h/2], [ this.screen_w/2,  this.screen_h/2]); // r
-		this.borders[2].set([-this.screen_w/2,  this.screen_h/2], [ this.screen_w/2,  this.screen_h/2]); // t
-		this.borders[3].set([-this.screen_w/2, -this.screen_h/2], [ this.screen_w/2, -this.screen_h/2]); // b
+		this.borders[0].set([-this.screen_w / 2, -this.screen_h / 2], [-this.screen_w / 2, this.screen_h / 2]); // l
+		this.borders[1].set([this.screen_w / 2, -this.screen_h / 2], [this.screen_w / 2, this.screen_h / 2]); // r
+		this.borders[2].set([-this.screen_w / 2, this.screen_h / 2], [this.screen_w / 2, this.screen_h / 2]); // t
+		this.borders[3].set([-this.screen_w / 2, -this.screen_h / 2], [this.screen_w / 2, -this.screen_h / 2]); // b
+
 		// don't trap balls outside the screen
 		// TODO: give objects a .onresize() method?
 		let epsilon = 0.01;
-		for(let e of this.scene)
-			if(e instanceof Ball) {
-				if(e.x < -this.screen_w/2)
-					e.x = -this.screen_w/2 + epsilon;
-				else if(e.x > this.screen_w/2)
-					e.x = this.screen_w/2 - epsilon;
-				if(e.y < -this.screen_h/2)
-					e.y = -this.screen_h/2 + epsilon;
-				else if(e.y > this.screen_h/2)
-					e.y = this.screen_h/2 - epsilon;
+		for (let e of this.scene)
+			if (e instanceof Ball) {
+				if (e.x < -this.screen_w / 2)
+					e.x = -this.screen_w / 2 + epsilon;
+				else if (e.x > this.screen_w / 2)
+					e.x = this.screen_w / 2 - epsilon;
+				if (e.y < -this.screen_h / 2)
+					e.y = -this.screen_h / 2 + epsilon;
+				else if (e.y > this.screen_h / 2)
+					e.y = this.screen_h / 2 - epsilon;
 			}
-		if(this.current_ui_action)
+		if (this.current_ui_action)
 			this.current_ui_action.resize();
 		this.render_needed = true;
 	}
@@ -786,9 +837,9 @@ class Sim {
 		];
 	}
 	is_good_spawn(x, y) {
-		for(let o of this.scene) {
-			if(o instanceof Wall) {
-				if(between(x, o.left,  o.right) && between(y, o.top,  o.bottom)) {
+		for (let o of this.scene) {
+			if (o instanceof Wall) {
+				if (between(x, o.left, o.right) && between(y, o.top, o.bottom)) {
 					return false;
 				}
 			}
@@ -798,7 +849,7 @@ class Sim {
 	draw_graphs() {
 		this.graph_ctx.clearRect(0, 0, this.graph.width, this.graph.height);
 		this.re_graph_ctx.clearRect(0, 0, this.re_graph.width, this.re_graph.height);
-		if(this.spread.length == 0)
+		if (this.spread.length == 0)
 			return;
 		// spread graph
 		let dx = this.graph.width / this.current_tick,
@@ -807,13 +858,13 @@ class Sim {
 			ph = h - 10;
 		this.graph_ctx.lineWidth = 2;
 		let colors = [red, grey, blue];
-		for(let p = 1; p <= 3; p++) {
+		for (let p = 1; p <= 3; p++) {
 			x = 0;
 			this.graph_ctx.strokeStyle = colors[p - 1];
 			this.graph_ctx.beginPath();
 			this.graph_ctx.moveTo(x, h - this.spread[0][p] / this.n_balls * ph);
 			x += dx;
-			for(let i = 1; i < this.spread.length; i++) {
+			for (let i = 1; i < this.spread.length; i++) {
 				this.graph_ctx.lineTo(x, h - this.spread[i][p] / this.n_balls * ph);
 				x += dx * this.spread[i][0];
 			}
@@ -829,8 +880,8 @@ class Sim {
 		this.re_graph_ctx.lineWidth = 2;
 		//let max_r = this.spread[this.spread.length - 1][4]; // TODO: r0-re consistency
 		let max_r = this.spread[0][5];
-		for(let i = 1; i < this.spread.length; i++) {
-			if(this.spread[i][5] > max_r)
+		for (let i = 1; i < this.spread.length; i++) {
+			if (this.spread[i][5] > max_r)
 				max_r = this.spread[i][5];
 		}
 		this.re_graph_ctx.font = "14px Arial";
@@ -839,7 +890,7 @@ class Sim {
 		this.re_graph_ctx.fillStyle = "#dcdcdc";
 		this.re_graph_ctx.strokeStyle = "#dcdcdc";
 		let lines = [max_r, .5 * max_r, 2.4, 1];
-		for(let p of lines) {
+		for (let p of lines) {
 			this.re_graph_ctx.beginPath();
 			this.re_graph_ctx.moveTo(0, h - p / max_r * ph);
 			this.re_graph_ctx.lineTo(this.re_graph.width - 100, h - p / max_r * ph);
@@ -854,7 +905,7 @@ class Sim {
 		this.re_graph_ctx.beginPath();
 		this.re_graph_ctx.moveTo(x, h - this.spread[0][5] / max_r * ph);
 		x += dx;
-		for(let i = 1; i < this.spread.length; i++) {
+		for (let i = 1; i < this.spread.length; i++) {
 			this.re_graph_ctx.lineTo(x, h - this.spread[i][5] / max_r * ph);
 			x += dx * this.spread[i][0];
 		}
@@ -877,22 +928,22 @@ class Sim {
 			target_dx = 120;
 		//if(this.current_tick <= target_dx)
 		//	return 0;
-		for(i = this.spread.length - 1; i >= 0; i--) {
+		for (i = this.spread.length - 1; i >= 0; i--) {
 			tick_total += this.spread[i][0];
-			if(tick_total >= target_dx)
+			if (tick_total >= target_dx)
 				break;
 		}
-		if(tick_total < target_dx)
+		if (tick_total < target_dx)
 			return 0; //this.get_r0();
 		let dy = (this.spread[this.spread.length - 1][1] + this.spread[this.spread.length - 1][3])
-					- (this.spread[i][1] + this.spread[i][3]);
+			- (this.spread[i][1] + this.spread[i][3]);
 		let spread_per_sec = 60 * (dy / tick_total);
 		return spread_per_sec / this.spread[this.spread.length - 1][1] * this.recovery_time / 1000;
 	}
 	update() {
 		this.current_tick++;
-		for(let i = 0; i < this.scene.length; i++) {
-			for(let j = i + 1; j < this.scene.length; j++) {
+		for (let i = 0; i < this.scene.length; i++) {
+			for (let j = i + 1; j < this.scene.length; j++) {
 				this.scene[i].updateAgainst(this.scene[j]);
 			}
 			this.scene[i].update();
@@ -900,9 +951,9 @@ class Sim {
 		let vulnerable = 0,
 			infected = 0,
 			recovered = 0;
-		for(let e of this.scene) {
-			if(e instanceof Ball) {
-				switch(e.state) {
+		for (let e of this.scene) {
+			if (e instanceof Ball) {
+				switch (e.state) {
 					case states.vulnerable:
 						vulnerable++;
 						break;
@@ -917,10 +968,10 @@ class Sim {
 				}
 			}
 		}
-		if(this.spread.length > 0
-		  && infected == this.spread[this.spread.length - 1][1]
-		  && vulnerable == this.spread[this.spread.length - 1][2]
-		  && recovered == this.spread[this.spread.length - 1][3])
+		if (this.spread.length > 0
+			&& infected == this.spread[this.spread.length - 1][1]
+			&& vulnerable == this.spread[this.spread.length - 1][2]
+			&& recovered == this.spread[this.spread.length - 1][3])
 			this.spread[this.spread.length - 1][0]++;
 		else {
 			this.spread.push([1, infected, vulnerable, recovered, this.get_r0(), this.get_re()]);
@@ -929,40 +980,40 @@ class Sim {
 		// TODO: start cutting off this.spread once it gets really long?
 		// TODO: make it more steppy..
 
-		if(this.current_tick % 10 == 0 && this.current_tick > 60 && this.n_balls > 0) {
+		if (this.current_tick % 10 == 0 && this.current_tick > 60 && this.n_balls > 0) {
 			//this.r0_display.innerHTML = `Simulation R0 = ${Math.round(this.get_r0() * 10) / 10}`;
 			this.r0_display.innerHTML = `Inherent R0 = ${this.get_r0().toFixed(1)}`;
 		}
-		
-		if(!this.force_run && infected == 0 && this.spread.length > 0 && this.spread[this.spread.length - 1][0] * this.dt * 1000 >= this.delay) {
+
+		if (!this.force_run && infected == 0 && this.spread.length > 0 && this.spread[this.spread.length - 1][0] * this.dt * 1000 >= this.delay) {
 			this.pause();
 		}
 	}
 	render() {
 		this.ctx.clearRect(0, 0, this.screen_px_w, this.screen_px_h);
-		for(let e of this.scene)
+		for (let e of this.scene)
 			e.draw();
 		this.draw_graphs();
-		if(this.current_ui_action)
+		if (this.current_ui_action)
 			this.current_ui_action.draw();
 	}
 	loop() {
 		window.requestAnimationFrame(this.loop.bind(this));
-		if(this.simulation_running) {
+		if (this.simulation_running) {
 			let t = performance.now(),
 				did_update = false;
-			while(t - this.last_tick >= this.dt * 1000) {
+			while (t - this.last_tick >= this.dt * 1000) {
 				did_update = true;
 				this.last_tick += this.dt * 1000;
 				this.update();
 			}
-			if(did_update)
+			if (did_update)
 				this.render();
-			else if(this.render_needed) {
+			else if (this.render_needed) {
 				this.render_needed = false;
 				this.render();
 			}
-		} else if(this.render_needed) {
+		} else if (this.render_needed) {
 			this.render_needed = false;
 			this.render();
 		}
@@ -972,10 +1023,10 @@ class Sim {
 		this.simulation_running = true;
 		this.last_tick = performance.now();
 		let infected = 0;
-		for(let e of this.scene)
-			if(e instanceof Ball && e.state == states.infected)
+		for (let e of this.scene)
+			if (e instanceof Ball && e.state == states.infected)
 				infected++;
-		if(!this.force_run && infected == 0 && this.spread.length > 0 && this.spread[this.spread.length - 1][0] * this.dt * 1000 >= this.delay)
+		if (!this.force_run && infected == 0 && this.spread.length > 0 && this.spread[this.spread.length - 1][0] * this.dt * 1000 >= this.delay)
 			this.force_run = true;
 		// undo potential bring to front
 		this.infection_count.style.zIndex = null;
@@ -1001,7 +1052,7 @@ class Sim {
 		//this.r0_display.style.background = "rgba(0, 0, 0, .05)";
 	}
 	toggle_running() {
-		if(this.simulation_running) {
+		if (this.simulation_running) {
 			this.pause();
 		} else {
 			this.play();
@@ -1019,11 +1070,11 @@ class Sim {
 		let input = document.createElement("input");
 		input.type = "text";
 		input.style.margin = "20px 0px";
-		input.addEventListener("keydown", function(e) {
-			if(e.keyCode == 13) {
+		input.addEventListener("keydown", function (e) {
+			if (e.keyCode == 13) {
 				this.do_add_balls(parseInt(input.value));
 				input.value = "";
-			} else if(e.keyCode == 27) {
+			} else if (e.keyCode == 27) {
 				this.close_add_balls_modal();
 			}
 		}.bind(this), false);
@@ -1034,7 +1085,7 @@ class Sim {
 		let submit = document.createElement("div");
 		submit.setAttribute("class", "submit");
 		submit.innerHTML = "Go";
-		submit.addEventListener("click", function(e) {
+		submit.addEventListener("click", function (e) {
 			this.do_add_balls(parseInt(input.value));
 			input.value = "";
 		}.bind(this), false);
@@ -1049,9 +1100,9 @@ class Sim {
 		input.focus();
 	}
 	do_add_balls(q) {
-		if(!isNaN(q) && q > 0) {
+		if (!isNaN(q) && q > 0) {
 			this.n_balls += q;
-			for(let i = 0; i < q; i++)
+			for (let i = 0; i < q; i++)
 				this.scene.push(new Ball(this));
 			this.close_add_balls_modal();
 		}
@@ -1062,7 +1113,7 @@ class Sim {
 		this.circleadd_modal.remove();
 	}
 	cancel_action() {
-		if(this.current_ui_action == null)
+		if (this.current_ui_action == null)
 			return;
 		this.current_ui_action.deactivate();
 		this.current_ui_action = null;
@@ -1073,7 +1124,7 @@ class Sim {
 			line_props = ["p1", "p2", "render_line"],
 			wall_props = ["x", "y", "opening"];
 		let copy = {};
-		for(let p of sim_props)
+		for (let p of sim_props)
 			copy[p] = this[p];
 		copy["default_sim_props"] = {
 			radius: this.default_sim_props.radius,
@@ -1083,20 +1134,20 @@ class Sim {
 			infection_duration: this.default_sim_props.infection_duration
 		}
 		copy.scene = [];
-		for(let obj of this.scene) {
-			if(obj instanceof Ball) {
-				let oc = {type: "ball"};
-				for(let p of ball_props)
+		for (let obj of this.scene) {
+			if (obj instanceof Ball) {
+				let oc = { type: "ball" };
+				for (let p of ball_props)
 					oc[p] = obj[p];
 				copy.scene.push(oc);
-			} else if(obj instanceof Line) {
-				let oc = {type: "line"};
-				for(let p of line_props)
+			} else if (obj instanceof Line) {
+				let oc = { type: "line" };
+				for (let p of line_props)
 					oc[p] = obj[p];
 				copy.scene.push(oc);
-			} else if(obj instanceof Wall) {
-				let oc = {type: "wall"};
-				for(let p of wall_props)
+			} else if (obj instanceof Wall) {
+				let oc = { type: "wall" };
+				for (let p of wall_props)
 					oc[p] = obj[p];
 				copy.scene.push(oc);
 			}
@@ -1117,20 +1168,20 @@ class Sim {
 		input.style.display = "none";
 		document.body.appendChild(input);
 		input.click();
-		input.addEventListener("change", function() {
-			if(input.files.length != 1) {
+		input.addEventListener("change", function () {
+			if (input.files.length != 1) {
 				console.log("crap");
 				input.remove();
 				return;
 			}
 			var reader = new FileReader();
-			reader.onload = function(e) {
+			reader.onload = function (e) {
 				let data = JSON.parse(e.target.result);
 				let sim_props = ["recovery_time", "delay", "current_tick", "n_balls", "n_collisions", "spread"],
 					ball_props = ["r", "m", "x", "y", "vx", "vy", "state", "infected_time"],
 					line_props = ["p1", "p2", "render_line"],
 					wall_props = ["x", "y", "opening"];
-				for(let p of sim_props)
+				for (let p of sim_props)
 					this[p] = data[p];
 				this.default_sim_props.radius = data.default_sim_props.radius;
 				this.default_sim_props.velocity = data.default_sim_props.velocity;
@@ -1139,17 +1190,17 @@ class Sim {
 				this.default_sim_props.infection_duration = data.default_sim_props.infection_duration;
 				this.update_dat();
 				this.scene = [];
-				for(let obj of data.scene) {
-					switch(obj.type) {
+				for (let obj of data.scene) {
+					switch (obj.type) {
 						case "ball":
 							let b = new Ball(this);
-							for(let p of ball_props)
+							for (let p of ball_props)
 								b[p] = obj[p];
 							this.scene.push(b);
 							break;
 						case "line":
 							let l = new Line(this);
-							for(let p of line_props)
+							for (let p of line_props)
 								l[p] = obj[p];
 							this.scene.push(l);
 							break;
@@ -1161,7 +1212,7 @@ class Sim {
 							break;
 					}
 				}
-				for(let i = 0; i < 4; i++)
+				for (let i = 0; i < 4; i++)
 					this.borders[i] = this.scene[i];
 				this.pause();
 				this.force_run = false;
@@ -1187,7 +1238,7 @@ class Sim {
 		this.render_needed = true;
 		this.infection_count.innerHTML = "";
 		this.r0_display.innerHTML = "";
-		for(let b of this.borders)
+		for (let b of this.borders)
 			this.scene.push(b);
 	}
 }
