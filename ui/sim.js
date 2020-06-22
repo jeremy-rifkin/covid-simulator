@@ -11,33 +11,76 @@ let states = {
 	recovered: "#7dcef1" // no longer able to be infected; blue
 };
 
+// MAL TODO Why can I not select some of the balls somtimes?
+
+class SimProperties {
+	/* SimProperties hold the default properties for a specific simulation
+	*/
+	constructor() {
+		this.setToDefault();
+	}
+	setToDefault() {
+		// defaults about the virus and its transmission
+		this.days_per_second = 2;
+		this.infectious_days = 16;
+		this.presymptomatic_days = 4;
+		this.reinfectable_rate = 0.0;
+		this.transmission_rate = 1.0;
+
+		// defaults about the balls
+		this.ball_radius = 2;
+		this.ball_velocity = 7.0;
+
+		// defaults about the board
+		this.wall_openings = 0;
+
+		// TODO MAL Fix this when you understand some JavaScript.
+		// This is a function bound to the parent inside the constructor.
+		// For now, since I don't know what that means, I can't call this function
+		// (it doesn't exist).
+		//    this.parent.update_dat();
+	}
+	timeDiffToDays(time_diff) {
+		/* Takes in a time difference (in ms) and returns the number of days represented
+
+		parameters :
+			time_diff (DOMHighResTimeStamp) : difference between two timestamps in milliseconds
+		returns :
+			days (int)
+		*/
+		// performance.now() returns a timestamp in milliseconds
+		// interesting; why this instead of Date.now()?
+		this.days_per_second * time_diff / 1000;
+	}
+}
+
 class Ball {
 	/* A Ball represents a person in this simulation.
 
-	Ball tracks its own velocity, its own infection state, and how many other Balls it has infected.
+	Ball tracks its own ball_velocity, its own infection state, and how many other Balls it has infected.
 	*/
 	constructor(parent) {
-		/* Construct a new Ball instance with its parent Sim-specified default radius
+		/* Construct a new Ball instance with its parent Sim-specified default ball_radius
 		and its mass as a default 10,
 		placing it randomly in the parent Sim instance screen with a random direction
-		and the default velocity given by its parent Sim.
+		and the default ball_velocity given by its parent Sim.
 
 		non-field parameters:
 			None
 
 		fields:
 			parent (Sim) : parent Sim passed in
-			r (<type>) : radius
+			r (<type>) : ball_radius
 			m (<type>) : mass
-			vs (float) : x velocity
-			vy (float) : y velocity
+			vs (float) : x ball_velocity
+			vy (float) : y ball_velocity
 			selected (boolean) : True if this ball is selected in the simulation by the user (only during setup?)
 			state (states enum) : virus state of the ball
 			infected_time (time) : time at which the state became infected
 			reproduction_count (int) : the number of Balls this Ball has infected
 		*/
 		this.parent = parent; // ref to parent sim instance
-		this.r = this.parent.default_sim_props.radius;
+		this.r = this.parent.default_sim_props.ball_radius;
 		this.m = 10;
 		do {
 			this.x = (-this.parent.screen_w / 2 + this.r) + Math.random() * (this.parent.screen_w - (2 * this.r));
@@ -45,15 +88,15 @@ class Ball {
 		} while (!this.parent.is_good_spawn(this.x, this.y));
 
 		let theta = Math.random() * 2 * Math.PI;
-		this.vx = this.parent.default_sim_props.velocity * Math.cos(theta);
-		this.vy = this.parent.default_sim_props.velocity * Math.sin(theta);
+		this.vx = this.parent.default_sim_props.ball_velocity * Math.cos(theta);
+		this.vy = this.parent.default_sim_props.ball_velocity * Math.sin(theta);
 		this.selected = false;
 		this.state = states.vulnerable;
 		this.infected_time = this.state == states.infected ? current_tick : null;
 		this.reproduction_count = 0;
 	}
 	update() {
-		/* Update the location of the Ball by velocity and virus state of the Ball
+		/* Update the location of the Ball by ball_velocity and virus state of the Ball
 
 		If this ball has been infected for more than parent.recovery_time, make it "recovered".
 		*/
@@ -67,7 +110,7 @@ class Ball {
 		}
 	}
 	rotate(v, theta) {
-		/* Taking in a velocity vector, rotate by theta.
+		/* Taking in a ball_velocity vector, rotate by theta.
 		*/
 		// MAL TODO move to utils
 		return [
@@ -102,7 +145,7 @@ class Ball {
 				// do elastic
 				let dvx = this.vx - obj.vx,
 					dvy = this.vy - obj.vy;
-				// if dot product of the velocity vector and vector between balls is negative, they're
+				// if dot product of the ball_velocity vector and vector between balls is negative, they're
 				// going in the same direction and we don't want to update or the balls will stick
 				if (dvx * dx + dvy * dy >= 0) {
 					let theta = -Math.atan2(obj.y - this.y, obj.x - this.x);
@@ -185,7 +228,7 @@ class Line {
 			by = obj.y;
 		// check dot product real quick
 		if ((bx - x) * obj.vx + (by - y) * obj.vy <= 0) {
-			// reflect velocity vector
+			// reflect ball_velocity vector
 			let n = [obj.x - x, obj.y - y],
 				n_mag = Math.sqrt(n[0] * n[0] + n[1] * n[1]),
 				v = [obj.vx, obj.vy],
@@ -672,22 +715,29 @@ class Sim {
 		this.reset.addEventListener("click", this.reset_sim.bind(this), false);
 		this.controls.appendChild(this.reset);
 
-		function sim_props_class(pr) {
-			this.radius = 2;
-			this.velocity = 7;
-			this.wall_openings = 0;
-			this.transmission_rate = 1;
-			this.infection_duration = 20; // TODO
-			this.reset_to_default = function () {
-				this.radius = 2;
-				this.velocity = 7;
-				this.wall_openings = 0;
-				this.transmission_rate = 1;
-				this.infection_duration = 20;
-				pr.update_dat();
-			}.bind(this);
-		}
-		this.default_sim_props = new sim_props_class(this);
+		/*		function sim_props_class(pr) {
+					this.ball_radius = 2;
+					this.ball_velocity = 7;
+					this.wall_openings = 0;
+					this.transmission_rate = 1;
+					this.infectious_days = 20; // TODO
+					this.setToDefault = function () {
+						this.ball_radius = 2;
+						this.ball_velocity = 7;
+						this.wall_openings = 0;
+						this.transmission_rate = 1;
+						this.infectious_days = 20;
+						pr.update_dat();
+					}.bind(this);
+				}
+				this.default_sim_props = new sim_props_class(this);
+		*/
+		// MAL TODO: other than that I broke the reset,
+		// and that the vis is separate from the values now,
+		// this makes a little more separation sense to me.
+		// How do you move the vis (down below) mostly into the class?
+		// Can that be done?
+		this.default_sim_props = new SimProperties(this);
 
 		// check for saved props
 		if (localStorage.getItem("default_sim_props") != null) {
@@ -704,7 +754,7 @@ class Sim {
 
 		var dat_gui = new dat.GUI({ autoPlace: false });
 		this.container.appendChild(dat_gui.domElement);
-		let dat_radius = dat_gui.add(this.default_sim_props, "radius", 0.1, 5);
+		let dat_radius = dat_gui.add(this.default_sim_props, "ball_radius", 0.1, 5);
 		dat_radius.onChange(function (v) {
 			for (let e of this.scene) {
 				if (e instanceof Ball) {
@@ -714,7 +764,7 @@ class Sim {
 			this.render_needed = true;
 			save_props();
 		}.bind(this));
-		let dat_velocity = dat_gui.add(this.default_sim_props, "velocity", 0.1, 20, 0.01);
+		let dat_velocity = dat_gui.add(this.default_sim_props, "ball_velocity", 0.1, 20, 0.01);
 		dat_velocity.onChange(function (v) {
 			for (let e of this.scene) {
 				if (e instanceof Ball) {
@@ -741,14 +791,17 @@ class Sim {
 		dat_transmission.onChange(function (v) {
 			save_props();
 		}.bind(this));
-		let dat_recovery = dat_gui.add(this.default_sim_props, "infection_duration", 0, 20, 0.1);
+		let dat_recovery = dat_gui.add(this.default_sim_props, "infectious_days", 0, 20, 0.1);
 		dat_recovery.onChange(function (v) {
-			//this.default_sim_props.infection_duration
+			//this.default_sim_props.infectious_days
 			this.recovery_time = v * 1000;
 			save_props();
 		}.bind(this));
-		dat_gui.add(this.default_sim_props, "reset_to_default");
-		// this is hacky and bad
+		let dat_reset_to_default = dat_gui.add(this.default_sim_props, "setToDefault");
+		dat_reset_to_default.onChange(function () {
+			this.update_dat();
+		}.bind(this));
+		// this is hacky and bad -- MAL Why is this hacky and bad?
 		this.update_dat = function () {
 			dat_radius.updateDisplay();
 			dat_velocity.updateDisplay();
@@ -1127,11 +1180,11 @@ class Sim {
 		for (let p of sim_props)
 			copy[p] = this[p];
 		copy["default_sim_props"] = {
-			radius: this.default_sim_props.radius,
-			velocity: this.default_sim_props.velocity,
+			ball_radius: this.default_sim_props.ball_radius,
+			ball_velocity: this.default_sim_props.ball_velocity,
 			wall_openings: this.default_sim_props.wall_openings,
 			transmission_rate: this.default_sim_props.transmission_rate,
-			infection_duration: this.default_sim_props.infection_duration
+			infectious_days: this.default_sim_props.infectious_days
 		}
 		copy.scene = [];
 		for (let obj of this.scene) {
@@ -1183,11 +1236,11 @@ class Sim {
 					wall_props = ["x", "y", "opening"];
 				for (let p of sim_props)
 					this[p] = data[p];
-				this.default_sim_props.radius = data.default_sim_props.radius;
-				this.default_sim_props.velocity = data.default_sim_props.velocity;
+				this.default_sim_props.ball_radius = data.default_sim_props.ball_radius;
+				this.default_sim_props.ball_velocity = data.default_sim_props.ball_velocity;
 				this.default_sim_props.wall_openings = data.default_sim_props.wall_openings;
 				this.default_sim_props.transmission_rate = data.default_sim_props.transmission_rate;
-				this.default_sim_props.infection_duration = data.default_sim_props.infection_duration;
+				this.default_sim_props.infectious_days = data.default_sim_props.infectious_days;
 				this.update_dat();
 				this.scene = [];
 				for (let obj of data.scene) {
