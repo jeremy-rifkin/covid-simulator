@@ -998,16 +998,15 @@ class Sim {
 	}
 	get_r0() {
 		let infection_duration_time = this.recovery_time / 1000,
-			//collisions_per_balls_per_second = 2 * this.n_collisions / this.n_balls / ((this.current_tick - 60) / 60);
-			collisions_per_balls_per_second = this.n_collisions / this.n_balls / ((this.current_tick - 60) / 60); // -60 to compensate for earlier hack
+			collisions_per_balls_per_second = 2 * this.n_collisions / this.n_balls / ((this.current_tick - 60) / 60); // -60 to compensate for earlier hack
+		// scalar * seconds * collisions / ball / second = collisions per ball for the infection duration
 		return this.default_sim_props.transmission_rate * infection_duration_time * collisions_per_balls_per_second;
 	}
 	get_re() {
+		// find an interval of 120 ticks (dt=120)
 		let tick_total = 0,
 			i,
 			target_dx = 120;
-		//if(this.current_tick <= target_dx)
-		//	return 0;
 		for (i = this.spread.length - 1; i >= 0; i--) {
 			tick_total += this.spread[i][0];
 			if (tick_total >= target_dx)
@@ -1015,10 +1014,14 @@ class Sim {
 		}
 		if (tick_total < target_dx)
 			return 0; //this.get_r0();
+		// y = infected + recovered
 		let dy = (this.spread[this.spread.length - 1][1] + this.spread[this.spread.length - 1][3])
-			- (this.spread[i][1] + this.spread[i][3]);
-		let spread_per_sec = 60 * (dy / tick_total);
-		return spread_per_sec / this.spread[this.spread.length - 1][1] * this.recovery_time / 1000;
+				   - (this.spread[i][1] + this.spread[i][3]);
+		// dy / tick_total = dy / dt = d(I+R)/dt = new cases per tick
+		let new_cases_per_second = 60 * (dy / tick_total);
+		// assumption has been recovery_time * d(I+R)/dt = R0 / I, which would mean
+		// R0 = recovery_time * d(I+R)/dt * I but that's clearly incorrect. TODO:
+		return new_cases_per_second * this.spread[this.spread.length - 1][1] * this.recovery_time / 1000;
 	}
 	update() {
 		this.current_tick++;

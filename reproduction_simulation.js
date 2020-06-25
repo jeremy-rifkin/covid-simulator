@@ -1,12 +1,14 @@
-let screen_w = 256, // my screen
-	screen_h = 132.6, // my screen
+let screen_w = 200, // my screen
+	screen_h = 139.89, // my screen
 	dt = 1 / 60,
 	sim_duration = 1000,
+	recovery_time = 20,
 	current_tick = 0,
 	n_balls = 70,
 	n_collisions = 0,
 	default_velocity = 12,
-	default_radius = 2;
+	default_radius = 2,
+	transmission_rate = 1;
 
 class Ball {
 	constructor() {
@@ -168,17 +170,11 @@ borders[2].set([-screen_w/2,  screen_h/2], [ screen_w/2,  screen_h/2]); // t
 borders[3].set([-screen_w/2, -screen_h/2], [ screen_w/2, -screen_h/2]); // b
 
 function avg_collisions() {
-	//let t = 0, d = 0;
-	//for(let e of scene)
-	//	if(e instanceof Ball) {
-	//		t += e.n_collisions;
-	//		d++;
-	//	}
-	//let avg_collision_per_ball = t /  d;
-	//console.log(avg_collision_per_ball / (current_tick / 60)); // average collisions per ball per second
-	return 2 * n_collisions / n_balls / (current_tick / 60);
+	let infection_duration_time = recovery_time, // infection duration in seconds
+		collisions_per_balls_per_second = 2 * n_collisions / n_balls / (current_tick / 60);
+	// scalar * seconds * collisions / ball / second = collisions per ball for the infection duration
+	return transmission_rate * infection_duration_time * collisions_per_balls_per_second;
 }
-
 
 function do_sim() {
 	current_tick = 0;
@@ -199,16 +195,6 @@ function do_sim() {
 			}
 			scene[i].update();
 		}
-		//let total_v = 0, total_count = 0;
-		//for(let e of scene) {
-		//	if(e instanceof Ball) {
-		//		total_v += Math.sqrt(e.vx*e.vx + e.vy*e.vy);
-		//		total_count++;
-		//	}
-		//}
-		//if(total_count != n_balls)
-		//	throw "oops";
-		//console.log(total_v / total_count);
 	}
 	for(let i = 0; i < 120; i++) { // simulate for 2 seconds so balls have a chance to resolve overlaps
 		update();
@@ -220,33 +206,8 @@ function do_sim() {
 	}
 }
 
-// n_balls
-//for(let _n = 10; _n <= 1000; _n += 10) {
-//	n_balls = _n;
-//	do_sim();
-//	console.log(n_balls, avg_collisions());
-//}
-//console.log("--------------------");
-// velocity
-//n_balls = 400;
-//for(let _v = 0; _v <= 60; _v += 1) {
-//	//_v = 30;
-//	default_velocity = _v;
-//	do_sim();
-//	console.log(avg_collisions());
-//	//break;
-//}
-
-// test lookup table:
-for(let _n = 0; ; _n += 100) {
-	n_balls = _n;
-	if(Math.PI * default_radius*default_radius * n_balls / (screen_w * screen_h) > Math.PI * Math.sqrt(3) / 6)
-		break;
-	process.stdout.write((Math.PI * default_radius*default_radius * n_balls / (screen_w * screen_h)).toString() + "\t");
-	for(_v = 0; _v <= 60; _v += 10) {
-		default_velocity = _v;
-		do_sim();
-		process.stdout.write("\t" + avg_collisions().toString());
-	}
-	process.stdout.write("\n");
-}
+n_balls = 400;
+default_velocity = 10;
+default_radius = 2;
+do_sim();
+console.log(avg_collisions());
