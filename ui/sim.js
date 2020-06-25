@@ -5,10 +5,10 @@ let red = "#e56a59",
 
 let states = {
 	/* The state of the ball with respect to the virus */
-	vulnerable: "#c6c6c6", // never infected; grey
-	infected: "#e56a59",//"#e8e388", // infected but not yet showing symptoms; yellow
-	symptomatic: "#e56a59", // infected and showing symptoms; red
-	recovered: "#7dcef1" // no longer able to be infected; blue
+	vulnerable: grey, // never infected; grey
+	infected: yellow, // infected but not yet showing symptoms; yellow
+	symptomatic: red, // infected and showing symptoms; red
+	recovered: blue   // no longer able to be infected; blue
 };
 
 // MAL TODO Why can I not select some of the balls somtimes?
@@ -16,8 +16,34 @@ let states = {
 class SimProperties {
 	/* SimProperties hold the default properties for a specific simulation
 	*/
-	constructor() {
+	constructor(sim_id, parent, simulation_default_properties) {
+		this.id = sim_id;
+		this.parent = parent;
+		// setToDefault will set the master default values
 		this.setToDefault();
+		// apply the default properties default to the simulation
+		this.simulation_default_properties = simulation_default_properties;
+		this.apply_simulation_defaults();
+		// lastly, check if simulation properties were saved locally
+		if (localStorage.getItem(`default_sim_props_${sim_id}`) != null) {
+			try {
+				let props = JSON.parse(localStorage.getItem(`default_sim_props_${this.id}`));
+				for (let prop in props) {
+					this[prop] = props[prop];
+				}
+			} catch { }
+		}
+		// setup gui
+		this.init_gui();
+	}
+	save_props() {
+		// sadly we can't just JSON.stringify(this) because this is cyclic.
+		let properties_to_save = ["days_per_second", "infectious_days", "presymptomatic_days",
+		"reinfectable_rate", "transmission_rate", "ball_radius", "ball_velocity", "wall_openings"];
+		let copy = {};
+		for(let prop of properties_to_save)
+			copy[prop] = this[prop];
+		localStorage.setItem(`default_sim_props_${this.id}`, JSON.stringify(copy));
 	}
 	setToDefault() {
 		// defaults about the virus and its transmission
@@ -40,6 +66,81 @@ class SimProperties {
 		// (it doesn't exist).
 		//    this.parent.update_dat();
 	}
+	apply_simulation_defaults() {
+		for(let property in this.simulation_default_properties) {
+			this[property] = this.simulation_default_properties[property];
+		}
+	}
+	reset_to_default() {
+		this.setToDefault();
+		this.apply_simulation_defaults();
+		this.update_dat();
+	}
+	init_gui() {
+		// setup dat gui
+		var dat_gui = new dat.GUI({ autoPlace: false });
+		this.parent.container.appendChild(dat_gui.domElement);
+		// radius
+		let dat_radius = dat_gui.add(this, "ball_radius", 0.1, 5);
+		dat_radius.onChange(function (v) {
+			for (let e of this.parent.scene) {
+				if (e instanceof Ball) {
+					e.r = v;
+				}
+			}
+			this.parent.render_needed = true;
+			this.save_props();
+		}.bind(this));
+		// velocity
+		let dat_velocity = dat_gui.add(this, "ball_velocity", 0.1, 20, 0.01);
+		dat_velocity.onChange(function (v) {
+			for (let e of this.parent.scene) {
+				if (e instanceof Ball) {
+					let m = Math.sqrt(e.vx * e.vx + e.vy * e.vy);
+					e.vx *= v / m;
+					e.vy *= v / m;
+				}
+			}
+			this.parent.render_needed = true;
+			this.save_props();
+		}.bind(this));
+		// wall openings
+		let dat_wall = dat_gui.add(this, "wall_openings", 0, 40);
+		dat_wall.onChange(function (v) {
+			for (let e of this.parent.scene) {
+				if (e instanceof Wall) {
+					e.opening = v;
+					e.update_opening();
+				}
+			}
+			this.parent.render_needed = true;
+			this.save_props();
+		}.bind(this));
+		// transmission rate
+		let dat_transmission = dat_gui.add(this, "transmission_rate", 0, 1, 0.01);
+		dat_transmission.onChange(function (v) {
+			this.save_props();
+		}.bind(this));
+		// infectious days
+		let dat_recovery = dat_gui.add(this, "infectious_days", 0, 20, 0.1);
+		dat_recovery.onChange(function (v) {
+			//this.infectious_days
+			this.recovery_time = v * 1000;
+			this.save_props();
+		}.bind(this));
+		// reset properties
+		let dat_reset_to_default = dat_gui.add(this, "reset_to_default").name("reset properties");
+		// this is hacky and bad -- MAL Why is this hacky and bad?
+		this.update_dat = function () {
+			dat_radius.updateDisplay();
+			dat_velocity.updateDisplay();
+			dat_wall.updateDisplay();
+			dat_transmission.updateDisplay();
+			dat_recovery.updateDisplay();
+			this.save_props();
+		}.bind(this);
+	}
+	update_dat() {} // this will be redefined in init_gui
 	timeDiffToDays(time_diff) {
 		/* Takes in a time difference (in ms) and returns the number of days represented
 
@@ -105,6 +206,8 @@ class Ball {
 		this.y += this.vy * this.parent.dt;
 		// check our infection time
 		if (this.state == states.infected && (this.parent.current_tick - this.infected_time) * this.parent.dt * 1000 >= this.parent.recovery_time) { // MAL TODO what's the parent.dt * 1000?
+									// JR note: parent.dt * 1000 should be the tick duration in milliseconds
+									// so the left hand side is the total milliseconds since infection
 			this.state = states.recovered;
 			//this.infected_time = null;
 		}
@@ -399,6 +502,16 @@ class Wall {
 	}
 }
 
+/*
+UI actions / components implement the following interface:
+class IUIAction {
+	constructor();
+	resize();
+	deactivate();
+	draw();
+}
+*/
+
 class DrawWallsHandler {
 	constructor(parent) {
 		this.parent = parent;
@@ -611,7 +724,7 @@ class PointerHandler {
 }
 
 class Sim {
-	constructor(container) {
+	constructor(sim_id, container, simulation_default_properties) {
 		// build DOM
 		this.container = container;
 
@@ -715,101 +828,15 @@ class Sim {
 		this.reset.addEventListener("click", this.reset_sim.bind(this), false);
 		this.controls.appendChild(this.reset);
 
-		/*		function sim_props_class(pr) {
-					this.ball_radius = 2;
-					this.ball_velocity = 7;
-					this.wall_openings = 0;
-					this.transmission_rate = 1;
-					this.infectious_days = 20; // TODO
-					this.setToDefault = function () {
-						this.ball_radius = 2;
-						this.ball_velocity = 7;
-						this.wall_openings = 0;
-						this.transmission_rate = 1;
-						this.infectious_days = 20;
-						pr.update_dat();
-					}.bind(this);
-				}
-				this.default_sim_props = new sim_props_class(this);
-		*/
 		// MAL TODO: other than that I broke the reset,
 		// and that the vis is separate from the values now,
 		// this makes a little more separation sense to me.
 		// How do you move the vis (down below) mostly into the class?
 		// Can that be done?
-		this.default_sim_props = new SimProperties(this);
-
-		// check for saved props
-		if (localStorage.getItem("default_sim_props") != null) {
-			try {
-				let props = JSON.parse(localStorage.getItem("default_sim_props"));
-				for (let prop in props) {
-					this.default_sim_props[prop] = props[prop];
-				}
-			} catch { }
-		}
-		let save_props = function () {
-			localStorage.setItem("default_sim_props", JSON.stringify(this.default_sim_props));
-		}.bind(this);
-
-		var dat_gui = new dat.GUI({ autoPlace: false });
-		this.container.appendChild(dat_gui.domElement);
-		let dat_radius = dat_gui.add(this.default_sim_props, "ball_radius", 0.1, 5);
-		dat_radius.onChange(function (v) {
-			for (let e of this.scene) {
-				if (e instanceof Ball) {
-					e.r = v;
-				}
-			}
-			this.render_needed = true;
-			save_props();
-		}.bind(this));
-		let dat_velocity = dat_gui.add(this.default_sim_props, "ball_velocity", 0.1, 20, 0.01);
-		dat_velocity.onChange(function (v) {
-			for (let e of this.scene) {
-				if (e instanceof Ball) {
-					let m = Math.sqrt(e.vx * e.vx + e.vy * e.vy);
-					e.vx *= v / m;
-					e.vy *= v / m;
-				}
-			}
-			this.render_needed = true;
-			save_props();
-		}.bind(this));
-		let dat_wall = dat_gui.add(this.default_sim_props, "wall_openings", 0, 40);
-		dat_wall.onChange(function (v) {
-			for (let e of this.scene) {
-				if (e instanceof Wall) {
-					e.opening = v;
-					e.update_opening();
-				}
-			}
-			this.render_needed = true;
-			save_props();
-		}.bind(this));
-		let dat_transmission = dat_gui.add(this.default_sim_props, "transmission_rate", 0, 1, 0.01);
-		dat_transmission.onChange(function (v) {
-			save_props();
-		}.bind(this));
-		let dat_recovery = dat_gui.add(this.default_sim_props, "infectious_days", 0, 20, 0.1);
-		dat_recovery.onChange(function (v) {
-			//this.default_sim_props.infectious_days
-			this.recovery_time = v * 1000;
-			save_props();
-		}.bind(this));
-		let dat_reset_to_default = dat_gui.add(this.default_sim_props, "setToDefault");
-		dat_reset_to_default.onChange(function () {
-			this.update_dat();
-		}.bind(this));
-		// this is hacky and bad -- MAL Why is this hacky and bad?
-		this.update_dat = function () {
-			dat_radius.updateDisplay();
-			dat_velocity.updateDisplay();
-			dat_wall.updateDisplay();
-			dat_transmission.updateDisplay();
-			dat_recovery.updateDisplay();
-			save_props();
-		}.bind(this);
+		// JR note: I moved the property gui into the SimProperties class. SimProperties just needed
+		// some extra info, mainly a parent pointer. I also was able to resolve the issue of the
+		// reset button not working by calling the update_dat method after re-applying the defaults.
+		this.default_sim_props = new SimProperties(sim_id, this, simulation_default_properties);
 
 		// initialize everything else
 		this.screen_px_w = null;
@@ -1241,7 +1268,7 @@ class Sim {
 				this.default_sim_props.wall_openings = data.default_sim_props.wall_openings;
 				this.default_sim_props.transmission_rate = data.default_sim_props.transmission_rate;
 				this.default_sim_props.infectious_days = data.default_sim_props.infectious_days;
-				this.update_dat();
+				this.default_sim_props.update_dat();
 				this.scene = [];
 				for (let obj of data.scene) {
 					switch (obj.type) {
