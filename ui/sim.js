@@ -73,6 +73,10 @@ class SimProperties {
 		This is necessary so that the Ball constructor can grab the default radius from
 		this.
 		*/
+		// TODO MAL: Broken for now. I first need to check to see how many balls are there,
+		// and then either add more or remove them.  Or I can remove all the balls and
+		// add them all back in (which might be better if we go towards having a default
+		// state for some balls, e.g., start with 1 infected ball).
 		this.parent.do_add_balls(this.n_balls);
 	}
 	reset_to_default() {
