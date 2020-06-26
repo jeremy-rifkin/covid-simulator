@@ -1,56 +1,105 @@
 <!DOCTYPE html>
 <html>
-	<head>
-		<title>COVID</title>
-		<meta charset="utf8"/>
-		<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@500&display=swap" rel="stylesheet" />
-		<link href="https://fonts.googleapis.com/css2?family=Cabin&display=swap" rel="stylesheet" />
-		<link href="https://fonts.googleapis.com/css2?family=Open+Sans&display=swap" rel="stylesheet"> 
-		<link href="style.css" rel="stylesheet" />
-		<script src="https://kit.fontawesome.com/2d6e849747.js" crossorigin="anonymous"></script>
-	</head>
-	<body>
-		<div class="content">
 
-			<h1>COVID-19 simulator</h1>
+<head>
+	<title>COVID</title>
+	<meta charset="utf8" />
+	<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@500&display=swap" rel="stylesheet" />
+	<link href="https://fonts.googleapis.com/css2?family=Cabin&display=swap" rel="stylesheet" />
+	<link href="https://fonts.googleapis.com/css2?family=Open+Sans&display=swap" rel="stylesheet">
+	<link href="style.css" rel="stylesheet" />
+	<script src="https://kit.fontawesome.com/2d6e849747.js" crossorigin="anonymous"></script>
+</head>
 
-			<div class="text">
-				<p>This is a basic simulation of the spread of COVID-19. <span style="font-weight: bold; color: #c6c6c6;">Grey</span> balls represent people who are vulnerable to the virus, <span style="font-weight: bold; color: #e56a59;">red</span> balls represent infected people, and <span style="font-weight: bold; color: #7dcef1;">blue</span> represents people who have recovered from the virus and are immune (we will assume reinfection can't happen).</p>
-				<div class="il">
-					<div><i class="fas fa-plus-circle"></i></div>
-					<p>Add people to the simulation field.</p>
-				</div>
-				<div class="il">
-					<div><i class="fas fa-mouse-pointer"></i></div>
-					<p>Left click with the pointer tool to mark a ball as infected and use the scroll wheel to open / close walls.</p>
-				</div>
-				<div class="il">
-					<div><i class="fas fa-border-none"></i></div>
-					<p>Walls serve as barriers to the spread of the virus and can be opened and closed. Right click to cancel placing walls.</p>
-				</div>
-				<div class="il">
-					<div><i class="fas fa-pencil-ruler"></i></div>
-					<p>You can draw lines on the field which impede spreading the virus. Right click to cancel drawing lines.</p>
-				</div>
-				<div class="il">
-					<div><i class="fas fa-download"></i></div>
-					<p>A simulation's state can be saved and reloaded it later.</p>
-				</div>
-				<div class="il">
-					<div><i class="fas fa-undo"></i></div>
-					<p>Reset the simulation to a blank slate.</p>
-				</div>
-				<p>The control panel on the right of the simulation can be used to tweak some simulation properties.</p>
-			</div>
-			
+<body>
+	<div class="content">
+
+		<h1>COVID-19 simulator</h1>
+
+		<div class="text">
+			<p>This is a basic simulation of the spread of COVID-19.
+				The simulator is designed to help people understand
+				a few basic principles of how COVID-19 spreads
+				and the public health steps used to stop it.
+			</p>
+
+			<p><span style="font-weight: bold; color: #c6c6c6;">Grey</span>
+				balls represent people who are vulnerable to the virus.
+			</p>
+
+			<p>When people are infected by the virus,
+				they develop cough, fever or other symptoms
+				and can spread the virus through contact with others.
+				The <span style="font-weight: bold; color: #e56a59;">red</span>
+				balls represent infected people who have symptoms
+				and are spreading the virus.
+			</p>
+
+			<p>After people recover from the virus, they are usually immune,
+				at least for a short time.
+				The virus and a vaccine for the virus both create immunity.
+				The <span style="font-weight: bold; color: #7dcef1;">blue</span>
+				balls represent people who have recovered from the virus and are immune.
+			</p>
+
+			<p>Some viruses are more contagious than others.
+				The Reproductive Number R of the virus is
+				the number of people one person with the disease can be expected
+				to share it with. COVID-19 has an initial R of about 2.4.
+				Each person with the disease infects an average of 2.4 other people
+				when most of the population is vulnerable.
+				In the simulation below,
+				press start <i class="fas fa-play"></i>
+				and watch how the epidemic spreads from person to person.
+				Each second is two days.
+				The timer shows how many days it takes for the epidemic to run
+				through the community until there are no more cases,
+				and the total shows how many uninfected people and how many infected
+				(immune) people are present at the end of the epidemic.
+				As the simulation progresses,
+				watch what happens to the R-effective display on the right.
+				Leave the setting for walls at 0% for this run.</p>
+
 			<div id="sim" class="sim"></div>
 
-			<div id="sim2" class="sim"></div>
-
+			<div class="il">
+				<div><i class="fas fa-plus-circle"></i></div>
+				<p>Add people to the simulation field.</p>
+			</div>
+			<div class="il">
+				<div><i class="fas fa-mouse-pointer"></i></div>
+				<p>Left click with the pointer tool to mark a ball
+					as infected and use the scroll wheel to open / close walls.</p>
+			</div>
+			<div class="il">
+				<div><i class="fas fa-border-none"></i></div>
+				<p>Walls serve as barriers to the spread of the virus
+					and can be opened and closed. Right click to cancel placing walls.</p>
+			</div>
+			<div class="il">
+				<div><i class="fas fa-pencil-ruler"></i></div>
+				<p>You can draw lines on the field which impede spreading the virus.
+					Right click to cancel drawing lines.</p>
+			</div>
+			<div class="il">
+				<div><i class="fas fa-download"></i></div>
+				<p>A simulation's state can be saved and reloaded it later.</p>
+			</div>
+			<div class="il">
+				<div><i class="fas fa-undo"></i></div>
+				<p>Reset the simulation to a blank slate.</p>
+			</div>
+			<p>The control panel on the right of the simulation can be used
+				to tweak some simulation properties.</p>
 		</div>
-		<script src="https://cdnjs.cloudflare.com/ajax/libs/dat-gui/0.7.7/dat.gui.min.js"></script>
-		<script src="utils.js"></script>
-		<script src="sim.js"></script>
-		<script src="index.js"></script>
-	</body>
+
+		<div id="sim2" class="sim"></div>
+
+	</div>
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/dat-gui/0.7.7/dat.gui.min.js"></script>
+	<script src="utils.js"></script>
+	<script src="sim.js"></script>
+	<script src="index.js"></script>
+</body>
+
 </html>
