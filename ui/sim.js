@@ -6,7 +6,7 @@ let red = "#e56a59",
 let states = {
 	/* The state of the ball with respect to the virus */
 	vulnerable: grey, // never infected; grey
-	infected: yellow, // infected but not yet showing symptoms; yellow
+	infected: red, // infected but not yet showing symptoms; yellow (once it's used)
 	symptomatic: red, // infected and showing symptoms; red
 	recovered: blue   // no longer able to be infected; blue
 };
@@ -39,9 +39,10 @@ class SimProperties {
 	save_props() {
 		// sadly we can't just JSON.stringify(this) because this is cyclic.
 		let properties_to_save = ["days_per_second", "infectious_days", "presymptomatic_days",
-		"reinfectable_rate", "transmission_rate", "ball_radius", "ball_velocity", "wall_openings"];
+			"reinfectable_rate", "transmission_rate", "ball_radius", "ball_velocity", "wall_openings",
+			"n_balls"];
 		let copy = {};
-		for(let prop of properties_to_save)
+		for (let prop of properties_to_save)
 			copy[prop] = this[prop];
 		localStorage.setItem(`default_sim_props_${this.id}`, JSON.stringify(copy));
 	}
@@ -60,22 +61,32 @@ class SimProperties {
 
 		// defaults about the board
 		this.wall_openings = 0;
-
-		// TODO MAL Fix this when you understand some JavaScript.
-		// This is a function bound to the parent inside the constructor.
-		// For now, since I don't know what that means, I can't call this function
-		// (it doesn't exist).
-		//    this.parent.update_dat();
+		this.n_balls = 0;
 	}
 	apply_simulation_defaults() {
-		for(let property in this.simulation_default_properties) {
+		for (let property in this.simulation_default_properties) {
 			this[property] = this.simulation_default_properties[property];
 		}
+	}
+	apply_board_defaults() {
+		/* Hack to allow for calling some functions _after_ the parent Sim
+		has appropriately set its default_sim_props to this.
+		This is necessary so that the Ball constructor can grab the default radius from
+		this.
+		*/
+		// TODO MAL: Broken for now. I first need to check to see how many balls are there,
+		// and then either add more or remove them.  Or I can remove all the balls and
+		// add them all back in (which might be better if we go towards having a default
+		// state for some balls, e.g., start with 1 infected ball).
+		this.parent.do_add_balls(this.n_balls);
 	}
 	reset_to_default() {
 		this.setToDefault();
 		this.apply_simulation_defaults();
+		this.apply_board_defaults();
 		this.update_dat();
+
+		// TODO MAL: I'm still not seeing the update to radius, velocity, etc reflected when I press this button....
 	}
 	init_gui() {
 		// setup dat gui
@@ -141,7 +152,7 @@ class SimProperties {
 			this.save_props();
 		}.bind(this);
 	}
-	update_dat() {} // this will be redefined in init_gui
+	update_dat() { } // this will be redefined in init_gui
 	timeDiffToDays(time_diff) {
 		/* Takes in a time difference (in ms) and returns the number of days represented
 
@@ -154,6 +165,7 @@ class SimProperties {
 		// interesting; why this instead of Date.now()?
 		this.days_per_second * time_diff / 1000;
 	}
+
 }
 
 class Ball {
@@ -206,9 +218,9 @@ class Ball {
 		this.x += this.vx * this.parent.dt;
 		this.y += this.vy * this.parent.dt;
 		// check our infection time
-		if (this.state == states.infected && (this.parent.current_tick - this.infected_time) * this.parent.dt * 1000 >= this.parent.recovery_time) { // MAL TODO what's the parent.dt * 1000?
-									// JR note: parent.dt * 1000 should be the tick duration in milliseconds
-									// so the left hand side is the total milliseconds since infection
+		if (this.state == states.infected && (this.parent.current_tick - this.infected_time) * this.parent.dt * 1000 >= this.parent.recovery_time) {
+			// JR note: parent.dt * 1000 should be the tick duration in milliseconds
+			// so the left hand side is the total milliseconds since infection
 			this.state = states.recovered;
 			//this.infected_time = null;
 		}
@@ -216,7 +228,6 @@ class Ball {
 	rotate(v, theta) {
 		/* Taking in a ball_velocity vector, rotate by theta.
 		*/
-		// MAL TODO move to utils
 		return [
 			v[0] * Math.cos(theta) - v[1] * Math.sin(theta),
 			v[0] * Math.sin(theta) + v[1] * Math.cos(theta)
@@ -224,6 +235,12 @@ class Ball {
 	}
 	updateBallInfectionStatesOnCollision(b1) {
 		/* update the infection state of b1 based on a collision with this */
+		// TODO MAL
+		// To see some issues (I probably borked the reproduction when I refactored,
+		// or possible the 60 second / tick hack has weird effects on different balls),
+		// use the first sim. Reset it, pick a ball, and watch it go.
+		// Some of the infections spread fast, but others don't spread.
+		// and I'm pretty sure the transmission rate is 1
 		if (this.state == states.infected && b1.state == states.vulnerable) {
 			// infect b1 if this is infected
 			if (Math.random() <= this.parent.default_sim_props.transmission_rate) {
@@ -829,16 +846,6 @@ class Sim {
 		this.reset.addEventListener("click", this.reset_sim.bind(this), false);
 		this.controls.appendChild(this.reset);
 
-		// MAL TODO: other than that I broke the reset,
-		// and that the vis is separate from the values now,
-		// this makes a little more separation sense to me.
-		// How do you move the vis (down below) mostly into the class?
-		// Can that be done?
-		// JR note: I moved the property gui into the SimProperties class. SimProperties just needed
-		// some extra info, mainly a parent pointer. I also was able to resolve the issue of the
-		// reset button not working by calling the update_dat method after re-applying the defaults.
-		this.default_sim_props = new SimProperties(sim_id, this, simulation_default_properties);
-
 		// initialize everything else
 		this.screen_px_w = null;
 		this.screen_px_h = null;
@@ -872,6 +879,12 @@ class Sim {
 		window.addEventListener("resize", this.resize.bind(this), false);
 		this.resize();
 		window.requestAnimationFrame(this.loop.bind(this));
+
+		// JR note: I moved the property gui into the SimProperties class. SimProperties just needed
+		// some extra info, mainly a parent pointer. I also was able to resolve the issue of the
+		// reset button not working by calling the update_dat method after re-applying the defaults.
+		this.default_sim_props = new SimProperties(sim_id, this, simulation_default_properties);
+		this.default_sim_props.apply_board_defaults();
 	}
 	resize() {
 		this.screen_px_w = this.canvas.width = this.container.getBoundingClientRect().width | 0;
@@ -1017,7 +1030,7 @@ class Sim {
 			return 0; //this.get_r0();
 		// y = infected + recovered
 		let dy = (this.spread[this.spread.length - 1][1] + this.spread[this.spread.length - 1][3])
-				   - (this.spread[i][1] + this.spread[i][3]);
+			- (this.spread[i][1] + this.spread[i][3]);
 		// dy / tick_total = dy / dt = d(I+R)/dt = new cases per tick
 		///let new_cases_per_second = 60 * (dy / tick_total);
 		// assumption has been recovery_time * d(I+R)/dt = R0 / I, which would mean
@@ -1193,6 +1206,7 @@ class Sim {
 		input.addEventListener("keydown", function (e) {
 			if (e.keyCode == 13) {
 				this.do_add_balls(parseInt(input.value));
+				this.close_add_balls_modal();
 				input.value = "";
 			} else if (e.keyCode == 27) {
 				this.close_add_balls_modal();
@@ -1207,6 +1221,7 @@ class Sim {
 		submit.innerHTML = "Go";
 		submit.addEventListener("click", function (e) {
 			this.do_add_balls(parseInt(input.value));
+			this.close_add_balls_modal();
 			input.value = "";
 		}.bind(this), false);
 		wrapper.appendChild(submit);
@@ -1224,7 +1239,6 @@ class Sim {
 			this.n_balls += q;
 			for (let i = 0; i < q; i++)
 				this.scene.push(new Ball(this));
-			this.close_add_balls_modal();
 		}
 		this.render_needed = true;
 	}
@@ -1360,5 +1374,6 @@ class Sim {
 		this.r0_display.innerHTML = "";
 		for (let b of this.borders)
 			this.scene.push(b);
+		this.default_sim_props.apply_board_defaults();
 	}
 }

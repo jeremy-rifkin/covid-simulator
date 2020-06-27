@@ -5,7 +5,8 @@ let sim = new Sim("sim1", document.getElementById("sim"), {
 	infectious_days: 16,
 	presymptomatic_days: 4,
 	reinfectable_rate: 0,
-	transmission_rate: 1
+	transmission_rate: 1.0,
+	n_balls: 50
 });
 let sim2 = new Sim("sim2", document.getElementById("sim2"), {
 	ball_radius: 3,
@@ -14,5 +15,6 @@ let sim2 = new Sim("sim2", document.getElementById("sim2"), {
 	infectious_days: 16,
 	presymptomatic_days: 4,
 	reinfectable_rate: 0,
-	transmission_rate: 0.5
+	transmission_rate: 0.5,
+	n_balls: 0
 });
