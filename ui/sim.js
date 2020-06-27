@@ -51,6 +51,7 @@ class SimProperties {
 		this.infectious_days = 16;
 		this.presymptomatic_days = 4;
 		this.reinfectable_rate = 0.0;
+		this.presymptomatic_transmission_rate = .2;
 		this.transmission_rate = 1.0;
 
 		// defaults about the balls
@@ -1018,11 +1019,47 @@ class Sim {
 		let dy = (this.spread[this.spread.length - 1][1] + this.spread[this.spread.length - 1][3])
 				   - (this.spread[i][1] + this.spread[i][3]);
 		// dy / tick_total = dy / dt = d(I+R)/dt = new cases per tick
-		let new_cases_per_second = 60 * (dy / tick_total);
+		///let new_cases_per_second = 60 * (dy / tick_total);
 		// assumption has been recovery_time * d(I+R)/dt = R0 / I, which would mean
 		// R0 = recovery_time * d(I+R)/dt * I but that's clearly incorrect. TODO:
-		return new_cases_per_second * this.spread[this.spread.length - 1][1] * this.recovery_time / 1000;
+		///return new_cases_per_second * this.spread[this.spread.length - 1][1] * this.recovery_time / 1000;
+		let spread_per_sec = 60 * (dy / tick_total);
+		return spread_per_sec / this.spread[this.spread.length - 1][1] * this.recovery_time / 1000;
 	}
+	/*
+	get_re() {
+		// find an interval of 120 ticks (dt=120)
+		let tick_total = 0,
+			i,
+			target_dx = 300;
+		for (i = this.spread.length - 1; i >= 0; i--) {
+			tick_total += this.spread[i][0];
+			if (tick_total >= target_dx)
+				break;
+		}
+		if (tick_total < target_dx)
+			return 0; //this.get_r0();
+		// y = infected + recovered
+		let dy = (this.spread[this.spread.length - 1][1] + this.spread[this.spread.length - 1][3])
+				   - (this.spread[i][1] + this.spread[i][3]);
+		// dy / tick_total = dy / dt = d(I+R)/dt = new cases per tick
+		let new_cases_per_second = 60 * (dy / tick_total);
+		// assumption has been recovery_time * d(I+R)/dt = R0 * I, which would mean
+		// R0 = recovery_time * d(I+R)/dt * I but that's clearly incorrect. TODO:
+		//return new_cases_per_second * this.spread[this.spread.length - 1][1] * this.recovery_time / 1000;
+
+		let f_s = this.spread[this.spread.length - 1][2] / this.n_balls,
+			f_i = this.spread[this.spread.length - 1][1] / this.n_balls,
+			ds = this.spread[this.spread.length - 1][2] - this.spread[i][2],
+			di = this.spread[this.spread.length - 1][1] - this.spread[i][1],
+			dr = this.spread[this.spread.length - 1][3] - this.spread[i][3],
+			beta = -1 / (f_s * f_i) * ds / tick_total,
+			nu = (beta * f_s * f_i - di / tick_total) / f_i,
+			RE = beta / nu;
+		//let RE = - (1 / (f_s * f_i) * ds / tick_total) / (1 / f_i * dr / tick_total);
+		return RE;
+	}
+	*/
 	update() {
 		this.current_tick++;
 		for (let i = 0; i < this.scene.length; i++) {
