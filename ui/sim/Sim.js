@@ -146,6 +146,8 @@ class Sim {
 		this.current_tick = 0;
 		this.n_balls = 0;
 		this.n_collisions = 0;
+		this.infected = 0; // Track the number of infected and recovered globally
+		this.recovered = 0;
 		this.scene = [];
 		this.spread = []; // [delta_tick, infected, vulnerable, recovered, r0, re]
 
@@ -363,34 +365,15 @@ class Sim {
 			}
 			this.scene[i].update();
 		}
-		let vulnerable = 0,
-			infected = 0,
-			recovered = 0;
-		for (let e of this.scene) {
-			if (e instanceof Ball) {
-				switch (e.state) {
-					case states.vulnerable:
-						vulnerable++;
-						break;
-					case states.infected:
-						infected++;
-						break;
-					case states.recovered:
-						recovered++;
-						break;
-					default:
-						throw "oops";
-				}
-			}
-		}
+		let vulnerable = this.n_balls - this.infected - this.recovered;
 		if (this.spread.length > 0
-			&& infected == this.spread[this.spread.length - 1][1]
+			&& this.infected == this.spread[this.spread.length - 1][1]
 			&& vulnerable == this.spread[this.spread.length - 1][2]
-			&& recovered == this.spread[this.spread.length - 1][3])
+			&& this.recovered == this.spread[this.spread.length - 1][3])
 			this.spread[this.spread.length - 1][0]++;
 		else {
-			this.spread.push([1, infected, vulnerable, recovered, this.get_r0(), this.get_re()]);
-			this.infection_count.innerHTML = `<span style="color: ${grey}">${vulnerable}</span> + <span style="color: ${red}">${infected}</span> + <span style="color: ${blue}">${recovered}</span> = ${vulnerable + infected + recovered}`;
+			this.spread.push([1, this.infected, vulnerable, this.recovered, this.get_r0(), this.get_re()]);
+			this.infection_count.innerHTML = `<span style="color: ${grey}">${vulnerable}</span> + <span style="color: ${red}">${this.infected}</span> + <span style="color: ${blue}">${this.recovered}</span> = ${this.n_balls}`;
 		}
 		// TODO: start cutting off this.spread once it gets really long?
 		// TODO: make it more steppy..
@@ -400,7 +383,8 @@ class Sim {
 			this.r0_display.innerHTML = `Inherent R0 = ${this.get_r0().toFixed(1)}`;
 		}
 
-		if (!this.force_run && infected == 0 && this.spread.length > 0 && this.spread[this.spread.length - 1][0] * this.dt * 1000 >= this.delay) {
+		// TODO  MAL what this this for? This is the only place force_run is used
+		if (!this.force_run && this.infected == 0 && this.spread.length > 0 && this.spread[this.spread.length - 1][0] * this.dt * 1000 >= this.delay) {
 			this.pause();
 		}
 	}
@@ -535,7 +519,9 @@ class Sim {
 		this.current_ui_action = null;
 	}
 	download_sim() {
-		let sim_props = ["recovery_time", "delay", "current_tick", "n_balls", "n_collisions", "spread"],
+		let sim_props = ["recovery_time", "delay", "current_tick",
+			"n_balls", "n_collisions", "infected", "recovered",
+			"spread"],
 			ball_props = ["r", "m", "x", "y", "vx", "vy", "state", "infected_time"],
 			line_props = ["p1", "p2", "render_line"],
 			wall_props = ["x", "y", "opening"];
@@ -593,7 +579,9 @@ class Sim {
 			var reader = new FileReader();
 			reader.onload = function (e) {
 				let data = JSON.parse(e.target.result);
-				let sim_props = ["recovery_time", "delay", "current_tick", "n_balls", "n_collisions", "spread"],
+				let sim_props = ["recovery_time", "delay", "current_tick",
+					"n_balls", "n_collisions", "infected", "recovered",
+					"spread"],
 					ball_props = ["r", "m", "x", "y", "vx", "vy", "state", "infected_time"],
 					line_props = ["p1", "p2", "render_line"],
 					wall_props = ["x", "y", "opening"];
@@ -649,6 +637,8 @@ class Sim {
 		this.current_tick = 0;
 		this.n_balls = 0;
 		this.n_collisions = 0;
+		this.infected = 0;
+		this.recovered = 0;
 		this.scene = [];
 		this.spread = [];
 		this.render_needed = true;

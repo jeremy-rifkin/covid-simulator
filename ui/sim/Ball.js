@@ -52,7 +52,8 @@ class Ball {
 			// JR note: parent.dt * 1000 should be the tick duration in milliseconds
 			// so the left hand side is the total milliseconds since infection
 			this.state = states.recovered;
-			//this.infected_time = null;
+			this.parent.recovered++;
+			this.parent.infected--;
 		}
 	}
 	rotate(v, theta) {
@@ -65,18 +66,12 @@ class Ball {
 	}
 	updateBallInfectionStatesOnCollision(b1) {
 		/* update the infection state of b1 based on a collision with this */
-		// TODO MAL
-		// To see some issues (I probably borked the reproduction when I refactored,
-		// or possible the 60 second / tick hack has weird effects on different balls),
-		// use the first sim. Reset it, pick a ball, and watch it go.
-		// Some of the infections spread fast, but others don't spread.
-		// and I'm pretty sure the transmission rate is 1
 		if (this.state == states.infected && b1.state == states.vulnerable) {
 			// infect b1 if this is infected
 			if (Math.random() <= this.parent.default_sim_props.transmission_rate) {
 				b1.state = states.infected;
 				b1.infected_time = this.parent.current_tick;
-				this.reproduction_count++;
+				this.parent.infected++;
 			}
 		}
 	}
