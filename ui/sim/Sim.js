@@ -299,6 +299,7 @@ class Sim {
 		return this.default_sim_props.transmission_rate * infection_duration_time * collisions_per_balls_per_second;
 	}
 	get_re() {
+		// this.spread is: [1, infected, vulnerable, recovered, this.get_r0(), this.get_re()]
 		// find an interval of 120 ticks (dt=120)
 		let tick_total = 0,
 			i,
@@ -314,12 +315,24 @@ class Sim {
 		let dy = (this.spread[this.spread.length - 1][1] + this.spread[this.spread.length - 1][3])
 			- (this.spread[i][1] + this.spread[i][3]);
 		// dy / tick_total = dy / dt = d(I+R)/dt = new cases per tick
-		///let new_cases_per_second = 60 * (dy / tick_total);
-		// assumption has been recovery_time * d(I+R)/dt = R0 / I, which would mean
-		// R0 = recovery_time * d(I+R)/dt * I but that's clearly incorrect. TODO:
-		///return new_cases_per_second * this.spread[this.spread.length - 1][1] * this.recovery_time / 1000;
 		let spread_per_sec = 60 * (dy / tick_total);
-		return spread_per_sec / this.spread[this.spread.length - 1][1] * this.recovery_time / 1000;
+
+		// find infection count t_i days ago
+		tick_total = 0;
+		let target_ticks = this.recovery_time;
+		for (i = this.spread.length - 1; i >= 0; i--) {
+			tick_total += this.spread[i][0];
+			if (tick_total >= target_ticks)
+				break;
+		}
+
+		let current_infection_count = this.spread[this.spread.length - 1][1] + this.spread[this.spread.length - 1][3],
+			ti_infection_count = i < 0 ? 0 : this.spread[i][1] + this.spread[i][3];
+
+		return (this.recovery_time / 1000 * spread_per_sec) / (current_infection_count - ti_infection_count);
+		//return (tick_total / 60 * spread_per_sec) / (current_infection_count - ti_infection_count);
+		
+		//return spread_per_sec / this.spread[this.spread.length - 1][1] * this.recovery_time / 1000;
 	}
 	/*
 	get_re() {
