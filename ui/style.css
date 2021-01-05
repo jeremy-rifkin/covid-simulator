@@ -70,8 +70,9 @@ html, body {
 }
 .sim .r0 {
 	position: absolute;
-	bottom: 200px;
-	right: 0;
+	/* note: interferes with re graph at this position but re graph is turned off. */
+	bottom: 0px;
+	right: 4px;
 }
 .sim .infection_count {
 	position: absolute;

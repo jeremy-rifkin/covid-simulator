@@ -249,7 +249,9 @@ class Sim {
 		}
 
 		// R_E graph
-		dx = (this.re_graph.width - 100) / this.current_tick;
+		// I am not happy with how RE is working so I have turned it off
+		return;
+		/*dx = (this.re_graph.width - 100) / this.current_tick;
 		x = 0;
 		h = this.re_graph.height - 100;
 		ph = h - 10;
@@ -290,7 +292,7 @@ class Sim {
 		this.re_graph_ctx.fillStyle = "#3c3c3c";
 		//this.re_graph_ctx.fillText("R effective", x + 5, h - this.spread[this.spread.length - 1][5] / max_r * ph);
 		this.re_graph_ctx.fillText(`R effective = ${this.spread[this.spread.length - 1][5].toFixed(1)}`, x + 5, h - this.spread[this.spread.length - 1][5] / max_r * ph);
-		this.re_graph_ctx.stroke();
+		this.re_graph_ctx.stroke();*/
 	}
 	get_r0() {
 		let infection_duration_time = this.recovery_time / 1000,
@@ -299,7 +301,10 @@ class Sim {
 		return this.default_sim_props.transmission_rate * infection_duration_time * collisions_per_balls_per_second;
 	}
 	get_re() {
-		// this.spread is: [1, infected, vulnerable, recovered, this.get_r0(), this.get_re()]
+		// I am not happy with how RE is working so I have turned it off
+		return 0;
+
+		/*// this.spread is: [1, infected, vulnerable, recovered, this.get_r0(), this.get_re()]
 		// find an interval of 120 ticks (dt=120)
 		let tick_total = 0,
 			i,
@@ -332,7 +337,7 @@ class Sim {
 		return (this.recovery_time / 1000 * spread_per_sec) / (current_infection_count - ti_infection_count);
 		//return (tick_total / 60 * spread_per_sec) / (current_infection_count - ti_infection_count);
 		
-		//return spread_per_sec / this.spread[this.spread.length - 1][1] * this.recovery_time / 1000;
+		//return spread_per_sec / this.spread[this.spread.length - 1][1] * this.recovery_time / 1000;*/
 	}
 	/*
 	get_re() {
@@ -409,8 +414,7 @@ class Sim {
 		// TODO: make it more steppy..
 
 		if (this.current_tick % 10 == 0 && this.current_tick > 60 && this.n_balls > 0) {
-			//this.r0_display.innerHTML = `Simulation R0 = ${Math.round(this.get_r0() * 10) / 10}`;
-			this.r0_display.innerHTML = `Inherent R0 = ${this.get_r0().toFixed(1)}`;
+			this.r0_display.innerHTML = `Estimated R0: ${this.get_r0().toFixed(1)}`;
 		}
 
 		if (!this.force_run && infected == 0 && this.spread.length > 0 && this.spread[this.spread.length - 1][0] * this.dt * 1000 >= this.delay) {
